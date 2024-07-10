@@ -17,19 +17,31 @@ def calculate_direction_diff(track_direction, heading):
     return direction_diff
 
 
+# Helper function to calculate the angle between two points
+def calculate_angle(agent_pos, waypoint):
+    y_diff = waypoint[1] - agent_pos[1]
+    x_diff = waypoint[0] - agent_pos[0]
+    angle = math.degrees(math.atan2(y_diff, x_diff))
+    return angle
+
+
+# Helper function to normalize turning direction; to reward correct heading while turning
+def determine_turn_direction(agent_heading, waypoint_angle):
+    angle_difference = waypoint_angle - agent_heading
+    # Normalize the angle to the range [-180, 180]
+    angle_difference = (angle_difference + 180) % 360 - 180
+    if angle_difference > 0:
+        return "Left"
+    elif angle_difference < 0:
+        return "Right"
+    else:
+        return "Straight"
+
+
 # Reward for completing a lap without going off track
 def reward_for_lap_completion(progress, all_wheels_on_track):
     if progress == 100 and all_wheels_on_track:
         return 100  # Large reward for completing a lap without going off track
-    return 0
-
-
-# Reward for faster lap completion
-def reward_for_faster_lap(progress, steps, previous_lap_time):
-    if progress == 100:
-        current_lap_time = steps
-        if previous_lap_time and current_lap_time < previous_lap_time:
-            return 50  # Reward for completing the lap faster than the previous one
     return 0
 
 
