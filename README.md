@@ -4,11 +4,11 @@
 
 
 ### s3 exports
-[s3 uri](s3://aws-deepracer-assets-bbc4aefb-84df-479c-ac81-1ac9da79f270/RE-SAC-Control/)
-[web url](https://aws-deepracer-assets-bbc4aefb-84df-479c-ac81-1ac9da79f270.s3.amazonaws.com/RE-SAC-Control/)
+s3 uri: s3://aws-deepracer-assets-bbc4aefb-84df-479c-ac81-1ac9da79f270/RE-SAC-Control/  
+[web url](https://aws-deepracer-assets-bbc4aefb-84df-479c-ac81-1ac9da79f270.s3.amazonaws.com/RE-SAC-Control/)  
 
-[s3 uri](s3://aws-deepracer-assets-bbc4aefb-84df-479c-ac81-1ac9da79f270/RE-SAC-Step/)
-[web url](https://aws-deepracer-assets-bbc4aefb-84df-479c-ac81-1ac9da79f270.s3.amazonaws.com/RE-SAC-Step/)
+s3 uri s3://aws-deepracer-assets-bbc4aefb-84df-479c-ac81-1ac9da79f270/RE-SAC-Step/  
+[web url](https://aws-deepracer-assets-bbc4aefb-84df-479c-ac81-1ac9da79f270.s3.amazonaws.com/RE-SAC-Step/)  
 
 
 #### Nice-to-have naming convention: 
