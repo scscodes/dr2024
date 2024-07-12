@@ -38,6 +38,7 @@ def reward_function(params):
             turn_angle += 360
         return turn_angle
 
+
     ############ READ ALL INPUT PARAMETERS ############
     all_wheels_on_track = params['all_wheels_on_track']
     x = params['x']
@@ -58,8 +59,9 @@ def reward_function(params):
 
     # Speed
     speed_reward = 0
+    speed_diff = speed - MIN_SPEED
     if speed >= MIN_SPEED:
-        speed_reward += 3
+        speed_reward += 5 * max(1, speed_diff)
     if speed > MAX_SPEED:
         speed_reward = -1
     reward += speed_reward
@@ -77,8 +79,7 @@ def reward_function(params):
     direction_diff = calc_direction_diff(waypoints, closest_waypoints, heading)
     if abs(turn_angle) > 10:
         if direction_diff < 10:
-            speed_diff = speed - MIN_SPEED
-            turning_reward = 15 * max(1, speed_diff)
+            turning_reward = 15
         else:
             turning_reward = -10
     reward += turning_reward
@@ -89,11 +90,11 @@ def reward_function(params):
 
     # Penalize being off the track
     if not all_wheels_on_track:
-        reward *= 0.90
+        reward *= 0.70
 
     # Penalize excessive steering angle
     if abs(steering_angle) > STEERING_ANGLE_THRESHOLD:
-        reward *= 0.80
+        reward *= 0.70
 
     # Penalize negative orientation
     current_direction_diff = calc_direction_diff(waypoints, closest_waypoints, heading)
