@@ -8,6 +8,27 @@
 - notebooks: `re-<algorithm>-<whatever you want>.ipynb`
 
 
+#### DR on the spot
+- CloudShell
+- Create base resources: `./create-base-resources.sh BASE-STACK-NAME YOUR-IP`
+-   base stack name = name of cloudformation stack being built
+-   your ip = public ip of your machine
+- `cd custom-files`
+- Update config files in this dir to set training
+-   hyperparameters, model metadata, reward fn
+-   run - world name, model prefix (unique name for each new model)
+- Create standard or spot (cheapest) instance
+-   `./create-standard-instance.sh` | `./create-spot-instance.sh`
+-   `./create-spot-instance.sh BASE-STACK-NAME TRAINING-STACK-NAME TIME-TO-LIVE`
+-   base stack name = from above
+-   training stack name = name for the training
+-   time to live = # min to keep running before automatic termination
+- View model on track (after waiting) `<instance ip>:8080`
+- If needed, force shutdown via cli `sudo shutdown now`
+- Increment training (clone) - `custom-files/`
+-   run - model prefix=new name, pretrained=True, pretrained_prefix=model to clone
+- Add users to stack `./add-access.sh BASE-STACK-NAME ACCESS-STACK-NAME <public ip>`
+
 ##### References
 - [tds f1 article](https://towardsdatascience.com/an-advanced-guide-to-aws-deepracer-2b462c37eea)
 - [tds repo](https://github.com/dgnzlz/Capstone_AWS_DeepRacer/tree/master)
