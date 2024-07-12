@@ -75,7 +75,7 @@ def reward_function(params):
     def parse_upcoming_waypoints(waypoints, closest_waypoints, tolerance=LINEAR_THRESHOLD):
         # iterate over waypoints for linear tolerance, return linear list, slope, and breakpoint index
         upcoming_waypoint = closest_waypoints[1]
-        upcoming_waypoint_index = waypoints[upcoming_waypoint]
+        upcoming_waypoint_index = upcoming_waypoint
 
         # check immediate path; if not straight, exit early
         immediate_waypoints = waypoints[upcoming_waypoint_index:upcoming_waypoint_index + 3]
