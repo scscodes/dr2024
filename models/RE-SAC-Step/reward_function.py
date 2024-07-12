@@ -4,8 +4,8 @@ import math
 def reward_function(params):
     ############ INIT ############
     reward = 1.0
-    MIN_SPEED = 0.5
-    MAX_SPEED = 2
+    MIN_SPEED = 1
+    MAX_SPEED = 3
     STEERING_ANGLE_THRESHOLD = 15.0  # +/- degrees
     DIRECTION_THRESHOLD = 15.0  # +/- degrees
     STEP_INTERVAL = 20
@@ -79,14 +79,14 @@ def reward_function(params):
     direction_diff = calc_direction_diff(waypoints, closest_waypoints, heading)
     if abs(turn_angle) > 10:
         if direction_diff < 10:
-            turning_reward = 15
+            turning_reward = 10 * max(1, speed_diff)
         else:
             turning_reward = -10
     reward += turning_reward
 
     # Pass go, collect $200
     if progress == 100:
-        reward += 25
+        reward += 50
 
     # Penalize being off the track
     if not all_wheels_on_track:
