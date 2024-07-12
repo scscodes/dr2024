@@ -1,5 +1,5 @@
 import math
-
+import numpy as np
 
 def reward_function(params):
     # initialize constants
@@ -56,25 +56,25 @@ def reward_function(params):
         return turn_angle
 
     def calc_linear_and_slope(points, tolerance=LINEAR_THRESHOLD):
-    # plot a series of points, check they are within tolerance to be considered a "straight line"
-    x_coordinates = [point[0] for point in points]
-    y_coordinates = [point[1] for point in points]
-    # linear regression; flatten coordinates and find appropriate line
-    A = np.vstack([x_coordinates, np.ones(len(x_coordinates))]).T
-    m, c = np.linalg.lstsq(A, y_coordinates, rcond=None)[0]
-
-    # calc distance of each point to the line
-    for x, y in zip(x_coordinates, y_coordinates):
-        y_int = m * x + c
-        distance = abs(y - y_int)
-        if distance > tolerance:
-            return False, None
-    return True, m
+        # plot a series of points, check they are within tolerance to be considered a "straight line"
+        x_coordinates = [point[0] for point in points]
+        y_coordinates = [point[1] for point in points]
+        # linear regression; flatten coordinates and find appropriate line
+        A = np.vstack([x_coordinates, np.ones(len(x_coordinates))]).T
+        m, c = np.linalg.lstsq(A, y_coordinates, rcond=None)[0]
+    
+        # calc distance of each point to the line
+        for x, y in zip(x_coordinates, y_coordinates):
+            y_int = m * x + c
+            distance = abs(y - y_int)
+            if distance > tolerance:
+                return False, None
+        return True, m
 
 
     def parse_upcoming_waypoints(waypoints, closest_waypoints, tolerance=LINEAR_THRESHOLD):
         # iterate over waypoints for linear tolerance, return linear list, slope, and breakpoint index
-        upcoming_waypoint = closest_waypoint[1]
+        upcoming_waypoint = closest_waypoints[1]
         upcoming_waypoint_index = waypoints[upcoming_waypoint]
 
         # check immediate path; if not straight, exit early
