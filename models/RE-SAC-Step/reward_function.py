@@ -85,7 +85,7 @@ def reward_function(params):
             return [], None, upcoming_waypoint_index
         
         # relatively safe to iterate remaining waypoints
-        linear_waypoints = linear_start
+        linear_waypoints = list(immediate_waypoints)
         while current_index < len(waypoints):
             upcoming_points = linear_waypoints + [waypoints[current_index]]
             upcoming_points_are_linear, slope = calc_linear_and_slope(upcoming_points, tolerance)
