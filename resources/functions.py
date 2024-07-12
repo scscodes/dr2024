@@ -38,13 +38,6 @@ def determine_turn_direction(agent_heading, waypoint_angle):
         return "Straight"
 
 
-# Reward for completing a lap without going off track
-def reward_for_lap_completion(progress, all_wheels_on_track):
-    if progress == 100 and all_wheels_on_track:
-        return 100  # Large reward for completing a lap without going off track
-    return 0
-
-
 # Reward turn detection and desired pathing
 def reward_for_correct_turn(waypoints, closest_waypoints, heading):
     # Look ahead to the next two waypoints to identify a turn

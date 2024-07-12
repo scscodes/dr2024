@@ -1,9 +1,8 @@
-# reward function for re-sac-control model
 import math
 def reward_function(params):
-    
+
     ############ HELPER FUNCTIONS ############
-    
+
     def calculate_track_direction(prev_point, next_point):
         track_direction = math.atan2(next_point[1] - prev_point[1], next_point[0] - prev_point[0])
         return math.degrees(track_direction)
@@ -18,7 +17,7 @@ def reward_function(params):
         progress = params['progress']
         all_wheels_on_track = params['all_wheels_on_track']
         steps = params['steps']
-    
+
         if progress == 100 and all_wheels_on_track:
             return 100  # Large reward for completing a lap without going off track
         return 0
@@ -38,30 +37,30 @@ def reward_function(params):
         heading = params['heading']
         distance_from_center = params['distance_from_center']
         track_width = params['track_width']
-    
+
         # Look ahead to the next 10 waypoints
         future_waypoints = [waypoints[(closest_waypoints[1] + i) % len(waypoints)] for i in range(1, 11)]
-    
+
         # Calculate the angles of the turns
         angles = []
         for i in range(len(future_waypoints) - 1):
             track_direction = calculate_track_direction(future_waypoints[i], future_waypoints[i + 1])
             direction_diff = calculate_direction_diff(track_direction, heading)
             angles.append(direction_diff)
-    
+
         # Reward for the smallest angle turn and penalize for swinging too far wide
         min_angle = min(angles)
         reward = max(0, 1 - (min_angle / 180))  # Reward is higher for smaller angles
-    
+
         # Penalize if the car swings too far wide
         if distance_from_center >= (track_width / 2):
             reward *= 0.5  # Penalize by reducing reward if the car is too far from the center
-    
+
         return reward * 10  # Scale the reward
-    
-    
+
+
     ############ READ ALL INPUT PARAMETERS ############
-    
+
     all_wheels_on_track = params['all_wheels_on_track']
     x = params['x']
     y = params['y']
@@ -106,7 +105,7 @@ def reward_function(params):
     # Reward for optimal turning behavior
     reward += reward_for_optimal_turn(params)
 
-    # Penalize if the car is not on the track 
+    # Penalize if the car is not on the track
     if not all_wheels_on_track:
         reward = 1e-3
 
