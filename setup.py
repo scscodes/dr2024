@@ -28,7 +28,7 @@ def install_requirements(requirements_file, venv_dir):
 
 
 def main():
-    venv_dir = '.venv'
+    venv_dir = 'venv'
     requirements_file = 'requirements.txt'
 
     create_venv(venv_dir)
