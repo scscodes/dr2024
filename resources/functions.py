@@ -1,5 +1,47 @@
 import math
+import numpy as np
 
+# Waypoint Alignment
+# closest_waypoints[0] = [x,y] = behind ; closest_waypoint[1] = [x,y] = front
+next_waypoint = waypoints[closest_waypoints[1]]
+previous_waypoint = waypoints[closest_waypoints[0]]
+
+def points_are_linear(points, tolerance=0.1):
+    # plot a series of points, check they are within tolerance to be considered a "straight line"
+    x_coordinates = [point[0] for point in points]
+    y_coordinates = [point[1] for point in points]
+    # linear regression; flatten coordinates and find appropriate line
+    A = np.vstack([x_coordinates, np.ones(len(x_coordinates))]).T
+    m, c = np.linalg.lstsq(A, y_coordinates, rcond=None)[0]
+
+    # calc distance of each point to the line
+    for x, y in zip(x_coordinates, y_coordinates):
+        y_int = m * x + c
+        distance = abs(y - y_int)
+        if distance > tolerance:
+            return False
+    return True
+
+
+def find_upcoming_straight(waypoints, closest_waypoints, tolerance=0.1):
+    # iterate over waypoints for linear tolerance, returning known-good and any break-inducing waypoint index
+    upcoming_waypoint = closest_waypoint[1]
+    upcoming_waypoint_index = waypoints[upcoming_waypoint]
+    linear_waypoints = []
+    
+    current_index = upcoming_waypoint_index + 3 # possibly more stable logic than hoping 1-2 points are aligned
+    while current_index < len(waypoints):
+        # test known-good + next waypoint
+        upcoming_points = linear_waypoints + [waypoints[current_index]]
+    
+        if points_are_linear(upcoming_points, tolerance):
+            linear_waypoints.append(waypoints[current_index])
+            current_index += 1
+        else:
+            break # incoming turn
+    return linear_waypoints, current_index
+    
+    
 
 # Calculate the track direction
 def calculate_track_direction(waypoints, closest_waypoints):
