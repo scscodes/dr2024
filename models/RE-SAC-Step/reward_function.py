@@ -2,12 +2,15 @@ import math
 import numpy as np
 
 def reward_function(params):
-    # initialize constants
+    # initialize constants; gm0
     reward = 1.0
+    CRASH_PENALTY = 0.1 # base penalty
+    
     MIN_SPEED = 1
     MAX_SPEED = 3
+    STEP_INTERVAL = 5 # steps to complete before evaluation
+    
     DIRECTION_THRESHOLD = 15.0  # +/- degrees
-    STEP_INTERVAL = 5
     LINEAR_THRESHOLD = 0.6 # acceptable diff to satisfy linear regression
     STEERING_ANGLE_THRESHOLD = 15.0  # acceptable steering angle cap
 
@@ -114,7 +117,7 @@ def reward_function(params):
     speed_diff = speed - MIN_SPEED
     if speed >= MIN_SPEED and speed <= MAX_SPEED:
         speed_reward += 2
-        if on_straight:
+        if on_straight and len(linear_waypoints) > 3:
             speed_reward *= max(1, speed_diff)
     reward += speed_reward
 
@@ -130,9 +133,9 @@ def reward_function(params):
     marker_3 = 0.8 * track_width
 
     if distance_from_center <= marker_1:
-        reward *= 1.2
+        reward *= 1.5
     elif distance_from_center <= marker_2:
-        reward *= 0.8
+        reward *= 1.0 # neutral reward
     elif distance_from_center <= marker_3:
         reward *= 0.5
     else:
@@ -151,9 +154,9 @@ def reward_function(params):
 
     # Penalize distracted driving
     if abs(steering_angle) < STEERING_ANGLE_THRESHOLD:
-        reward += 15
+        reward += 10
     else:
-        reward *=0.50
+        reward *= 0.75
 
     # Penalize being off the track
     if all_wheels_on_track:
