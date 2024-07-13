@@ -133,3 +133,30 @@ def reward_for_optimal_turn(waypoints, closest_waypoints, heading, distance_from
         reward *= 0.5  # Penalize by reducing reward if the car is too far from the center
 
     return reward * 10  # Scale the reward
+
+
+def calc_track_direction(point1, point2):
+    track_direction = math.atan2(point2[1] - point1[1], point2[0] - point1[0])
+    return math.degrees(track_direction)
+
+def calc_direction_diff(waypoints, closest_waypoints, heading):
+    track_direction = calc_track_direction(waypoints[closest_waypoints[0]], waypoints[closest_waypoints[1]])
+    direction_diff = abs(track_direction - heading)
+    if direction_diff > 180:
+        direction_diff = 360 - direction_diff
+    return direction_diff
+
+def calc_upcoming_turn_angle(waypoints, closest_waypoints):
+    next_point = waypoints[closest_waypoints[1]]
+    future_point = waypoints[(closest_waypoints[1] + 1) % len(waypoints)]
+
+    current_direction = calc_track_direction(waypoints[closest_waypoints[0]], next_point)
+    future_direction = calc_track_direction(next_point, future_point)
+
+    # Calculate the turn angle
+    turn_angle = future_direction - current_direction
+    if turn_angle > 180:
+        turn_angle -= 360
+    elif turn_angle < -180:
+        turn_angle += 360
+    return turn_angle

@@ -9,25 +9,24 @@
 
 
 ## DR on the spot
+`BASE_STACK_NAME` = name of cloud formation stack to build
+`YOUR_IP` = public IP
+`TRAINING_STACK_NAME` = name assigned to training
+`TIME_TO_LIVE` = # min to run before termination
+
 ### AWS Console > CloudShell
 
 ### Create base resources
-`./create-base-resources.sh BASE-STACK-NAME YOUR-IP`
--   base stack name = name of cloudformation stack being built
--   your ip = public ip of your machine
+`./create-base-resources.sh <BASE_STACK_NAME> <YOUR_IP>`
 
-### Set custom files and params
+### Update custom files: params and env
  `cd custom-files`
-- Update config files in this dir to set training
--   hyperparameters, model metadata, reward fn
--   run - world name, model prefix (unique name for each new model)
+- hyperparameters, model metadata, reward fn
+- `run.env` - track (world), race type, model prefix
 
 ### Create resources: standard or spot (cheapest) instance
 `./create-standard-instance.sh` | `./create-spot-instance.sh`  
-Ex: `./create-spot-instance.sh BASE-STACK-NAME TRAINING-STACK-NAME TIME-TO-LIVE`
--   base stack name = from above
--   training stack name = name for the training
--   time to live = # min to keep running before automatic termination
+Ex: `./create-spot-instance.sh <BASE_STACK_NAME> <TRAINING_STACK_NAME> <TIME_TO_LIVE>`
 
 ### Increment training (clone) - `custom-files/`
 -   run - model prefix=new name, pretrained=True, pretrained_prefix=model to clone
