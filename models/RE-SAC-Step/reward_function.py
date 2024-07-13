@@ -8,6 +8,7 @@ def reward_function(params):
     
     MIN_SPEED = 1
     MAX_SPEED = 3
+    OPTIMAL_SPEED = abs((MIN_SPEED+MAX_SPEED)/2)
     STEP_INTERVAL = 5 # steps to complete before evaluation
     
     DIRECTION_THRESHOLD = 15.0  # +/- degrees
@@ -140,17 +141,7 @@ def reward_function(params):
         reward *= 0.5
     else:
         reward = 1e-3 
-    
-    # Turning
-    # turning_reward = 0
-    # turn_angle = calc_upcoming_turn_angle(waypoints, closest_waypoints)
-    # direction_diff = calc_direction_diff(waypoints, closest_waypoints, heading)
-    # if abs(turn_angle) > 10:
-    #     if direction_diff < 10:
-    #         turning_reward = 10 * max(1, speed_diff)
-    #     else:
-    #         turning_reward = -10
-    # reward += turning_reward
+        
 
     # Penalize distracted driving
     if abs(steering_angle) < STEERING_ANGLE_THRESHOLD:
