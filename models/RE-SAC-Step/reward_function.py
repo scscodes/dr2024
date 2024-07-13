@@ -7,9 +7,8 @@ def reward_function(params):
     MIN_SPEED = 1
     MAX_SPEED = 3
     DIRECTION_THRESHOLD = 15.0  # +/- degrees
-    STEP_INTERVAL = 20
-    STEPS = 300  # update with each track
-    LINEAR_THRESHOLD = 0.1 # acceptable diff to satisfy linear regression
+    STEP_INTERVAL = 5
+    LINEAR_THRESHOLD = 0.6 # acceptable diff to satisfy linear regression
     STEERING_ANGLE_THRESHOLD = 15.0  # acceptable steering angle cap
 
     # input parameters
@@ -98,10 +97,12 @@ def reward_function(params):
    
     ############ APPLY AND RETURN REWARD ############
     linear_waypoints, slope, corner_index = parse_upcoming_waypoints(waypoints, closest_waypoints)
+    on_straight = len(linear_waypoints) > 0
+    
     # Heading alignment with straights
     heading_reward = 0
     if len(linear_waypoints) > 3 and slope is not None:
-        heading_reward = 25
+        heading_reward = 20
         slope_angle = np.degrees(np.arctan(slope))
         angle_diff = abs(heading - slope_angle)
         heading_reward = heading_reward * (1 - angle_diff/90) # smaller diff, higher reward
@@ -112,25 +113,41 @@ def reward_function(params):
     speed_reward = 0
     speed_diff = speed - MIN_SPEED
     if speed >= MIN_SPEED and speed <= MAX_SPEED:
-        speed_reward += 3
+        speed_reward += 2
+        if on_straight:
+            speed_reward *= max(1, speed_diff)
     reward += speed_reward
 
     # Steps (progress)
-    step_reward = 0
+    step_reward = 1
     if (steps % STEP_INTERVAL) == 0:
         step_reward = progress / steps
     reward += step_reward
 
+    # Position relative to center
+    marker_1 = 0.1 * track_width
+    marker_2 = 0.3 * track_width
+    marker_3 = 0.8 * track_width
+
+    if distance_from_center <= marker_1:
+        reward *= 1.2
+    elif distance_from_center <= marker_2:
+        reward *= 0.8
+    elif distance_from_center <= marker_3:
+        reward *= 0.5
+    else:
+        reward = 1e-3 
+    
     # Turning
-    turning_reward = 0
-    turn_angle = calc_upcoming_turn_angle(waypoints, closest_waypoints)
-    direction_diff = calc_direction_diff(waypoints, closest_waypoints, heading)
-    if abs(turn_angle) > 10:
-        if direction_diff < 10:
-            turning_reward = 10 * max(1, speed_diff)
-        else:
-            turning_reward = -10
-    reward += turning_reward
+    # turning_reward = 0
+    # turn_angle = calc_upcoming_turn_angle(waypoints, closest_waypoints)
+    # direction_diff = calc_direction_diff(waypoints, closest_waypoints, heading)
+    # if abs(turn_angle) > 10:
+    #     if direction_diff < 10:
+    #         turning_reward = 10 * max(1, speed_diff)
+    #     else:
+    #         turning_reward = -10
+    # reward += turning_reward
 
     # Penalize distracted driving
     if abs(steering_angle) < STEERING_ANGLE_THRESHOLD:
@@ -142,11 +159,11 @@ def reward_function(params):
     if all_wheels_on_track:
         reward += 2
     else:
-        reward *= 0.3
+        reward = 1e-3
 
-    # Pass go, collect $200
-    # if progress == 100:
-        # reward += 75
+    # Pass go, collect 100
+    if progress == 100:
+        reward += 100
 
     # Penalize negative orientation
     current_direction_diff = calc_direction_diff(waypoints, closest_waypoints, heading)
