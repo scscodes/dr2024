@@ -3,16 +3,16 @@
 `python setup.py`
 
 
-## Nice-to-have naming convention: 
+## Nice-to-have naming convention:
 - files: `re-<algorithm>-<whatever you want>.py`
 - notebooks: `re-<algorithm>-<whatever you want>.ipynb`
 
 
-## [DR on the spot](https://github.com/aws-deepracer-community/deepracer-on-the-spot?tab=readme-ov-file)
+## DR on the spot
 `BASE_STACK_NAME` = name of cloud formation stack to build  
 `YOUR_IP` = public IP  
 `TRAINING_STACK_NAME` = name assigned to training  
-`TIME_TO_LIVE` = # min to run before termination  
+`TIME_TO_LIVE` = # min to run before termination
 
 ### AWS Console > CloudShell
 
@@ -20,7 +20,7 @@
 `./create-base-resources.sh <BASE_STACK_NAME> <YOUR_IP>`
 
 ### Update custom files: params and env
- `cd custom-files`
+`cd custom-files`
 - hyperparameters, model metadata, reward fn
 - `run.env` - track (world), race type, model prefix
 
