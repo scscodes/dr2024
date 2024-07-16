@@ -8,7 +8,7 @@
 - notebooks: `re-<algorithm>-<whatever you want>.ipynb`
 
 
-## DR on the spot
+## [DR on the spot](https://github.com/aws-deepracer-community/deepracer-on-the-spot?tab=readme-ov-file)
 `BASE_STACK_NAME` = name of cloud formation stack to build  
 `YOUR_IP` = public IP  
 `TRAINING_STACK_NAME` = name assigned to training  
