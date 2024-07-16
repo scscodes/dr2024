@@ -9,10 +9,10 @@
 
 
 ## [DR on the spot](https://github.com/aws-deepracer-community/deepracer-on-the-spot?tab=readme-ov-file)
-`BASE_STACK_NAME` = name of cloud formation stack to build
-`YOUR_IP` = public IP
-`TRAINING_STACK_NAME` = name assigned to training
-`TIME_TO_LIVE` = # min to run before termination
+`BASE_STACK_NAME` = name of cloud formation stack to build  
+`YOUR_IP` = public IP  
+`TRAINING_STACK_NAME` = name assigned to training  
+`TIME_TO_LIVE` = # min to run before termination  
 
 ### AWS Console > CloudShell
 
@@ -31,11 +31,14 @@ Ex: `./create-spot-instance.sh <BASE_STACK_NAME> <TRAINING_STACK_NAME> <TIME_TO_
 ### Increment training (clone) - `custom-files/`
 -   run - model prefix=new name, pretrained=True, pretrained_prefix=model to clone
 
-### View model on track (after waiting) `<instance ip>:8080`
-- If needed, force shutdown via cli `sudo shutdown now`
+### View stack menu (after running)
+- Video feeds, grafana dashboards, config files and logs...
+- `<instance public ip>:8100/menu.html`
 
-### Add users to stack 
-`./add-access.sh BASE-STACK-NAME ACCESS-STACK-NAME <public ip>`
+### Other
+- track names (for run.env); `<name>.npy` minus the npy: [here](https://github.com/aws-deepracer-community/deepracer-race-data/tree/main/raw_data/tracks)
+- add users to stack: `./add-access.sh BASE-STACK-NAME ACCESS-STACK-NAME <public ip>`
+- force shutdown of resource: `sudo shutdown now`
 
 ### References
 - [tds f1 article](https://towardsdatascience.com/an-advanced-guide-to-aws-deepracer-2b462c37eea)
