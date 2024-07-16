@@ -3,7 +3,7 @@ import numpy as np
 
 
 def reward_function(params):
-    # initialize constants; gm0
+    # initialize constants; RE-GM0-SERIES; gm03; 2022_july_open
     reward = 1.0
     CRASH_PENALTY = 0.1  # base penalty
     MIN_SPEED = 1
@@ -121,6 +121,15 @@ def reward_function(params):
         reward += 30
     if progress == 100:
         reward += 100
+
+    # Turning
+    turn_reward = 0
+    if not on_straight:
+        turn_reward += 1
+        optimal_speed_diff = 5 - abs(speed - OPTIMAL_SPEED)
+        if all_wheels_on_track:
+            turn_reward += 2
+        turn_reward *= max(1, optimal_speed_diff)
 
     # Position relative to center
     marker_1 = 0.1 * track_width
