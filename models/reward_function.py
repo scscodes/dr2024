@@ -3,7 +3,7 @@ import numpy as np
 
 
 def reward_function(params):
-    # initialize constants; RE-GM0-SERIES; gm05; console; ace super speedway
+    # initialize constants; RE-GM0-SERIES; gm06; cli; thunder hill open
     reward = 1.0
     MIN_SPEED = 1
     MAX_SPEED = 3
