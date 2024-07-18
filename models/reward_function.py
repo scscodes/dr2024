@@ -3,16 +3,15 @@ import numpy as np
 
 
 def reward_function(params):
-    # initialize constants; RE-GM0-SERIES; gm03; 2022_july_open
+    # initialize constants; RE-GM0-SERIES; gm05; console; ace super speedway
     reward = 1.0
-    CRASH_PENALTY = 0.1  # base penalty
     MIN_SPEED = 1
     MAX_SPEED = 3
     OPTIMAL_SPEED = abs((MIN_SPEED + MAX_SPEED) / 2)
     STEP_INTERVAL = 5  # steps to complete before evaluation
     DIRECTION_THRESHOLD = 20.0  # +/- degrees
     LINEAR_THRESHOLD = 0.6  # acceptable diff to satisfy linear regression
-    STEERING_ANGLE_THRESHOLD = 15.0  # acceptable steering angle cap
+    STEERING_ANGLE_THRESHOLD = 10.0  # acceptable steering angle cap
 
     # input parameters
     all_wheels_on_track = params['all_wheels_on_track']
@@ -90,20 +89,22 @@ def reward_function(params):
     # Heading alignment with straights
     heading_reward = 0
     if len(linear_waypoints) > 3 and slope is not None:
-        heading_reward = 20
+        heading_reward += 20
         slope_angle = np.degrees(np.arctan(slope))
         angle_diff = abs(heading - slope_angle)
-        heading_reward = heading_reward * (1 - angle_diff / 90)  # smaller diff, higher reward
-        heading_reward += max(0, heading_reward) + abs(speed)
-    reward += heading_reward
+        angle_diff = np.clip(angle_diff, 0, 90)  # angle is 0-90
+        heading_reward *= heading_reward * (1 - angle_diff / 90)  # smaller diff, higher reward
+    reward += max(1, heading_reward)
 
     # Speed
     speed_reward = 0
-    speed_diff = speed - MIN_SPEED
-    if speed >= MIN_SPEED and speed <= MAX_SPEED:
-        speed_reward += 2
-        if on_straight and len(linear_waypoints) > 3:
-            speed_reward *= max(1, speed_diff)
+    if MIN_SPEED <= speed <= MAX_SPEED:
+        speed_reward += 3
+        speed_diff = abs(speed - MIN_SPEED)
+        if len(linear_waypoints) > 3:
+            speed_reward += max(1, speed_diff*len(linear_waypoints))
+        if len(linear_waypoints) <= 3:
+            speed_reward += max(1, abs(MAX_SPEED-speed)*len(linear_waypoints))
     reward += speed_reward
 
     # Steps (progress/actions taken)
@@ -113,23 +114,18 @@ def reward_function(params):
     reward += step_reward
 
     # Intermediate Progress
-    if progress > 25:
+    if progress > 5:
         reward += 10
+    if progress > 10:
+        reward += 15
+    if progress > 25:
+        reward += 25
     if progress > 50:
-        reward += 20
-    if progress > 75:
         reward += 30
+    if progress > 75:
+        reward += 50
     if progress == 100:
         reward += 100
-
-    # Turning
-    turn_reward = 0
-    if not on_straight:
-        turn_reward += 1
-        optimal_speed_diff = 5 - abs(speed - OPTIMAL_SPEED)
-        if all_wheels_on_track:
-            turn_reward += 2
-        turn_reward *= max(1, optimal_speed_diff)
 
     # Position relative to center
     marker_1 = 0.1 * track_width
@@ -146,10 +142,15 @@ def reward_function(params):
         reward = 1e-3
 
     # Penalize distracted driving
+    steering_reward = 0
     if abs(steering_angle) < STEERING_ANGLE_THRESHOLD:
-        reward += 10
+        steering_reward += 10
+    elif abs(steering_angle) < STEERING_ANGLE_THRESHOLD * 2:
+        # likely turn or correction; benefit slower speed
+        steering_reward += 3 * abs(MAX_SPEED - speed)
     else:
-        reward *= 0.75
+        steering_reward = 0.1
+    reward += steering_reward
 
     # Penalize being off the track
     if all_wheels_on_track:
