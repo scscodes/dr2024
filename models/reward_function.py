@@ -89,7 +89,7 @@ def reward_function(params):
     # Heading alignment with straights
     heading_reward = 0
     if len(linear_waypoints) > 3 and slope is not None:
-        heading_reward += 20
+        heading_reward += 10
         slope_angle = np.degrees(np.arctan(slope))
         angle_diff = abs(heading - slope_angle)
         angle_diff = np.clip(angle_diff, 0, 90)  # angle is 0-90
@@ -115,31 +115,30 @@ def reward_function(params):
 
     # Intermediate Progress
     if progress > 5:
-        reward += 10
+        reward += 1
     if progress > 10:
-        reward += 15
+        reward += 3
     if progress > 25:
-        reward += 25
+        reward += 5
     if progress > 50:
-        reward += 30
+        reward += 10
     if progress > 75:
-        reward += 50
+        reward += 15
     if progress == 100:
-        reward += 100
+        reward += 50
 
     # Position relative to center
     marker_1 = 0.1 * track_width
     marker_2 = 0.3 * track_width
     marker_3 = 0.8 * track_width
-
+    offset_reward = 1
     if distance_from_center <= marker_1:
-        reward *= 1.5
+        offset_reward += 1.5
     elif distance_from_center <= marker_2:
-        reward *= 1.0  # neutral reward
+        offset_reward += 1.0  # neutral reward
     elif distance_from_center <= marker_3:
-        reward *= 0.5
-    else:
-        reward = 1e-3
+        offset_reward -= 0.5
+    reward += abs(offset_reward)
 
     # Penalize distracted driving
     steering_reward = 0
