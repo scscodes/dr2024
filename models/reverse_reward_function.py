@@ -15,12 +15,6 @@ def reward_function(params):
     if not all_wheels_on_track:
         return 1e-3
 
-    # Reward for driving in reverse
-    if is_reversed:
-        reward += 2.0
-    else:
-        reward -= 1.0
-
     # Reward for progress
     reward += progress / 100.0
 
@@ -37,4 +31,10 @@ def reward_function(params):
     elif speed < 0.5:
         reward *= 0.8
 
+    # Be meta
+    if is_reversed:
+        reward *= 1.5
+    else:
+        reward *= 0.5
+    
     return float(reward)
