@@ -3,7 +3,7 @@ import numpy as np
 
 
 def reward_function(params):
-    # initialize constants; RE-GM0-SERIES; gm06; cli; thunder hill open
+    # initialize constants; RE-GM0-SERIES; gm08; cli; ace speedway (2022_april_open_ccw)
     reward = 1.0
     MIN_SPEED = 1
     MAX_SPEED = 3
@@ -85,7 +85,18 @@ def reward_function(params):
     ############ APPLY AND RETURN REWARD ############
     linear_waypoints, slope, corner_index = parse_upcoming_waypoints(waypoints, closest_waypoints)
     on_straight = len(linear_waypoints) > 0
+    # Penalize early termination events; avoid contaminating reward leading up to termination states
+    # Penalize negative orientation
+    current_direction_diff = calc_direction_diff(waypoints, closest_waypoints, heading)
+    if abs(current_direction_diff) > DIRECTION_THRESHOLD:
+        reward = 1e-3
+        return reward
 
+    # Penalize negative termination states
+    if is_crashed or is_offtrack:
+        reward = 1e-3
+        return reward
+        
     # Heading alignment with straights
     heading_reward = 0
     if len(linear_waypoints) > 3 and slope is not None:
@@ -121,11 +132,11 @@ def reward_function(params):
     if progress > 25:
         reward += 5
     if progress > 50:
-        reward += 10
+        reward += 7
     if progress > 75:
-        reward += 15
+        reward += 10
     if progress == 100:
-        reward += 50
+        reward += 25
 
     # Position relative to center
     marker_1 = 0.1 * track_width
@@ -155,15 +166,6 @@ def reward_function(params):
     if all_wheels_on_track:
         reward += 2
     else:
-        reward = 1e-3
-
-    # Penalize negative orientation
-    current_direction_diff = calc_direction_diff(waypoints, closest_waypoints, heading)
-    if abs(current_direction_diff) > DIRECTION_THRESHOLD:
-        reward = 1e-3
-
-    # Penalize negative termination states
-    if is_crashed or is_offtrack:
         reward = 1e-3
 
     # Ensure the reward is positive
