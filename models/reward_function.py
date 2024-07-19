@@ -5,12 +5,13 @@ import numpy as np
 def reward_function(params):
     # initialize constants; RE-GM0-SERIES; gm08; cli; ace speedway (2022_april_open_ccw)
     reward = 1.0
-    MIN_SPEED = 1
+    MIN_SPEED = 0.5
     MAX_SPEED = 3
     OPTIMAL_SPEED = abs((MIN_SPEED + MAX_SPEED) / 2)
     STEP_INTERVAL = 5  # steps to complete before evaluation
     DIRECTION_THRESHOLD = 20.0  # +/- degrees
     LINEAR_THRESHOLD = 0.6  # acceptable diff to satisfy linear regression
+    
     STEERING_ANGLE_THRESHOLD = 10.0  # acceptable steering angle cap
 
     # input parameters
@@ -41,6 +42,15 @@ def reward_function(params):
         if direction_diff > 180:
             direction_diff = 360 - direction_diff
         return direction_diff
+
+    def calc_turn_angle(waypoints, current_index, linear_waypoints):
+        current_slope = calc_linear_and_slope(linear_waypoints)[1]
+        next_index = (current_index + 3) % len(waypoints)
+        if next_index < len(waypoints):
+            next_slope = calc_linear_and_slope(waypoints[current_index:next_index + 1])[1]
+            angle = abs(math.degrees(math.atan(next_slope - current_slope)))
+            return angle
+        return 0
 
     def calc_linear_and_slope(points, tolerance=LINEAR_THRESHOLD):
         # plot a series of points, check they are within tolerance to be considered a "straight line"
@@ -84,7 +94,7 @@ def reward_function(params):
 
     ############ APPLY AND RETURN REWARD ############
     linear_waypoints, slope, corner_index = parse_upcoming_waypoints(waypoints, closest_waypoints)
-    on_straight = len(linear_waypoints) > 0
+    on_straight = len(linear_waypoints) > 3
     # Penalize early termination events; avoid contaminating reward leading up to termination states
     # Penalize negative orientation
     current_direction_diff = calc_direction_diff(waypoints, closest_waypoints, heading)
@@ -112,11 +122,30 @@ def reward_function(params):
     if MIN_SPEED <= speed <= MAX_SPEED:
         speed_reward += 3
         speed_diff = abs(speed - MIN_SPEED)
-        if len(linear_waypoints) > 3:
+        if on_straight:
             speed_reward += max(1, speed_diff*len(linear_waypoints))
-        if len(linear_waypoints) <= 3:
+        if not on_straight:
             speed_reward += max(1, abs(MAX_SPEED-speed)*len(linear_waypoints))
     reward += speed_reward
+
+    # Turning; reward navigation, but penalize excessive speeds
+    turn_angle_reward = 0
+    if not on_straight:
+        turn_angle_reward += 1
+        turn_angle = calc_turn_angle(waypoints, corner_index, linear_waypoints)
+        if turn_angle > 90:
+            turn_angle_reward += 10
+            if speed > (MAX_SPEED * 0.40):
+                turn_angle_reward * 0.40
+        elif turn_angle > 45:
+            turn_angle_reward += 5
+            if speed > (MAX_SPEED * 0.60):
+                turn_angle_reward * 0.60
+        elif turn_angle > 10:
+            turn_angle_reward += 2
+            if speed > (MAX_SPEED * 0.90):
+                turn_angle_reward * 0.90
+    reward += turn_angle_reward
 
     # Steps (progress/actions taken)
     step_reward = 1
