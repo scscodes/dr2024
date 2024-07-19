@@ -3,16 +3,16 @@ import numpy as np
 
 
 def reward_function(params):
-    # initialize constants; RE-GM0-SERIES; gm08; cli; ace speedway (2022_april_open_ccw)
+    # initialize constants; REGMSERIES;
     reward = 1.0
     MIN_SPEED = 0.5
     MAX_SPEED = 3
     OPTIMAL_SPEED = abs((MIN_SPEED + MAX_SPEED) / 2)
     STEP_INTERVAL = 5  # steps to complete before evaluation
-    DIRECTION_THRESHOLD = 20.0  # +/- degrees
+    DIRECTION_THRESHOLD = 25.0  # +/- degrees
+
     LINEAR_THRESHOLD = 0.6  # acceptable diff to satisfy linear regression
-    
-    STEERING_ANGLE_THRESHOLD = 10.0  # acceptable steering angle cap
+    STEERING_ANGLE_THRESHOLD = 15.0  # acceptable steering angle cap
 
     # input parameters
     all_wheels_on_track = params['all_wheels_on_track']
@@ -20,7 +20,7 @@ def reward_function(params):
     y = params['y']
     distance_from_center = params['distance_from_center']
     is_left_of_center = params['is_left_of_center']
-    heading = params['heading']
+    heading = params['heading']  # yaw
     progress = params['progress']
     steps = params['steps']
     speed = params['speed']
@@ -32,16 +32,23 @@ def reward_function(params):
     is_crashed = params['is_crashed']
 
     ############ HELPER FUNCTIONS ############
-    def calc_track_direction(point1, point2):
-        track_direction = math.atan2(point2[1] - point1[1], point2[0] - point1[0])
-        return math.degrees(track_direction)
+    def calc_heading(point1, point2, in_degrees: bool = True):
+        # return a heading in degrees (easier conditional) or radians (easier math)
+        delta_y = point2[1] - point1[1]
+        delta_x = point2[0] - point1[0]
+        heading_rad = math.atan2(delta_y, delta_x)
+        return math.degrees(heading_rad) if in_degrees else heading_rad
 
-    def calc_direction_diff(waypoints, closest_waypoints, heading):
-        track_direction = calc_track_direction(waypoints[closest_waypoints[0]], waypoints[closest_waypoints[1]])
-        direction_diff = abs(track_direction - heading)
-        if direction_diff > 180:
-            direction_diff = 360 - direction_diff
-        return direction_diff
+    def calc_centerline_heading_diff(waypoints, closest_waypoints, agent_heading):
+        # return difference in heading value, between agent and centerline
+        agent_heading_rad = math.radians(agent_heading)
+        if closest_waypoints[1] < len(waypoints) - 1:
+            center_heading_rad = calc_heading(waypoints[closest_waypoints[0]], waypoints[closest_waypoints[1]], False)
+        else:
+            center_heading_rad = calc_heading(waypoints[closest_waypoints[0]], waypoints[closest_waypoints[0] - 1], False)
+
+        center_agent_heading_diff = abs(agent_heading_rad - center_heading_rad)
+        return center_agent_heading_diff
 
     def calc_turn_angle(waypoints, current_index, linear_waypoints):
         current_slope = calc_linear_and_slope(linear_waypoints)[1]
@@ -53,7 +60,7 @@ def reward_function(params):
         return 0
 
     def calc_linear_and_slope(points, tolerance=LINEAR_THRESHOLD):
-        # plot a series of points, check they are within tolerance to be considered a "straight line"
+        # check that sequential points are within tolerance, considered a "straight line"
         x_coordinates = [point[0] for point in points]
         y_coordinates = [point[1] for point in points]
         # linear regression; flatten coordinates and find appropriate line
@@ -70,17 +77,15 @@ def reward_function(params):
 
     def parse_upcoming_waypoints(waypoints, closest_waypoints, tolerance=LINEAR_THRESHOLD):
         # iterate over waypoints for linear tolerance, return linear list, slope, and breakpoint index
-        upcoming_waypoint = closest_waypoints[1]
-        upcoming_waypoint_index = upcoming_waypoint
+        next_index = closest_waypoints[1]
+        immediate_waypoints = waypoints[next_index:next_index + 3]
 
-        # check immediate path; if not straight, exit early
-        immediate_waypoints = waypoints[upcoming_waypoint_index:upcoming_waypoint_index + 3]
-        current_index = upcoming_waypoint_index + 3  # possibly more stable than hoping 1-2 points
         linear_start, slope = calc_linear_and_slope(immediate_waypoints, LINEAR_THRESHOLD)
         if not linear_start:
-            return [], None, upcoming_waypoint_index
+            return [], None, next_index
 
         # relatively safe to iterate remaining waypoints
+        current_index = next_index + 3  # more stable than 1-2 points
         linear_waypoints = list(immediate_waypoints)
         while current_index < len(waypoints):
             upcoming_points = linear_waypoints + [waypoints[current_index]]
@@ -93,29 +98,9 @@ def reward_function(params):
         return linear_waypoints, slope, current_index
 
     ############ APPLY AND RETURN REWARD ############
-    linear_waypoints, slope, corner_index = parse_upcoming_waypoints(waypoints, closest_waypoints)
-    on_straight = len(linear_waypoints) > 3
-    # Penalize early termination events; avoid contaminating reward leading up to termination states
-    # Penalize negative orientation
-    current_direction_diff = calc_direction_diff(waypoints, closest_waypoints, heading)
-    if abs(current_direction_diff) > DIRECTION_THRESHOLD:
-        reward = 1e-3
-        return reward
 
-    # Penalize negative termination states
-    if is_crashed or is_offtrack:
-        reward = 1e-3
-        return reward
-        
-    # Heading alignment with straights
-    heading_reward = 0
-    if len(linear_waypoints) > 3 and slope is not None:
-        heading_reward += 10
-        slope_angle = np.degrees(np.arctan(slope))
-        angle_diff = abs(heading - slope_angle)
-        angle_diff = np.clip(angle_diff, 0, 90)  # angle is 0-90
-        heading_reward *= heading_reward * (1 - angle_diff / 90)  # smaller diff, higher reward
-    reward += max(1, heading_reward)
+    linear_waypoints, slope, corner_index = parse_upcoming_waypoints(waypoints, closest_waypoints)
+    on_straight = len(linear_waypoints) > 5
 
     # Speed
     speed_reward = 0
@@ -126,6 +111,8 @@ def reward_function(params):
             speed_reward += max(1, speed_diff*len(linear_waypoints))
         if not on_straight:
             speed_reward += max(1, abs(MAX_SPEED-speed)*len(linear_waypoints))
+    else:
+        speed_reward -= 5
     reward += speed_reward
 
     # Turning; reward navigation, but penalize excessive speeds
@@ -136,15 +123,15 @@ def reward_function(params):
         if turn_angle > 90:
             turn_angle_reward += 10
             if speed > (MAX_SPEED * 0.40):
-                turn_angle_reward * 0.40
+                turn_angle_reward *= 0.40
         elif turn_angle > 45:
             turn_angle_reward += 5
             if speed > (MAX_SPEED * 0.60):
-                turn_angle_reward * 0.60
+                turn_angle_reward *= 0.60
         elif turn_angle > 10:
             turn_angle_reward += 2
             if speed > (MAX_SPEED * 0.90):
-                turn_angle_reward * 0.90
+                turn_angle_reward *= 0.90
     reward += turn_angle_reward
 
     # Steps (progress/actions taken)
@@ -154,48 +141,52 @@ def reward_function(params):
     reward += step_reward
 
     # Intermediate Progress
-    if progress > 5:
-        reward += 1
-    if progress > 10:
-        reward += 3
-    if progress > 25:
-        reward += 5
-    if progress > 50:
-        reward += 7
-    if progress > 75:
-        reward += 10
-    if progress == 100:
-        reward += 25
+    progress_reward = abs(progress/2)
+    reward += progress_reward
 
     # Position relative to center
-    marker_1 = 0.1 * track_width
-    marker_2 = 0.3 * track_width
-    marker_3 = 0.8 * track_width
-    offset_reward = 1
-    if distance_from_center <= marker_1:
+    offset_reward = 0
+    if distance_from_center <= track_width * 0.05 and on_straight:
+        heading_multiplier = abs(4 * calc_centerline_heading_diff(waypoints, closest_waypoints, heading))
+        speed_multiplier = abs(2 * (MAX_SPEED/speed))
+        offset_reward += 2 + heading_multiplier + speed_multiplier
+    if distance_from_center <= track_width * 0.10:
         offset_reward += 1.5
-    elif distance_from_center <= marker_2:
+    elif distance_from_center <= track_width * 0.20:
         offset_reward += 1.0  # neutral reward
-    elif distance_from_center <= marker_3:
-        offset_reward -= 0.5
-    reward += abs(offset_reward)
+    elif distance_from_center <= track_width * 0.25:
+        offset_reward += 0.5
+    else:
+        offset_reward -= 1
+    reward += offset_reward
 
     # Penalize distracted driving
     steering_reward = 0
-    if abs(steering_angle) < STEERING_ANGLE_THRESHOLD:
-        steering_reward += 10
-    elif abs(steering_angle) < STEERING_ANGLE_THRESHOLD * 2:
-        # likely turn or correction; benefit slower speed
-        steering_reward += 3 * abs(MAX_SPEED - speed)
+    if abs(steering_angle) <= STEERING_ANGLE_THRESHOLD:
+        steering_reward += 5
+    elif abs(steering_angle) <= STEERING_ANGLE_THRESHOLD * 1.5:
+        steering_reward -= 1.5 * abs(MAX_SPEED - speed)
+    elif abs(steering_angle) <= STEERING_ANGLE_THRESHOLD * 2:
+        steering_reward -= 2 * abs(MAX_SPEED - speed)
     else:
-        steering_reward = 0.1
+        steering_reward = 0
     reward += steering_reward
+
+    # Penalize negative orientation
+    current_direction_diff = calc_centerline_heading_diff(waypoints, closest_waypoints, heading)
+    if abs(current_direction_diff) > DIRECTION_THRESHOLD:
+        reward = 1e-3
+        return reward
+
+    # Penalize negative termination states
+    if is_crashed or is_offtrack:
+        reward = 1e-3
 
     # Penalize being off the track
     if all_wheels_on_track:
         reward += 2
     else:
-        reward = 1e-3
+        reward *= 0.25
 
     # Ensure the reward is positive
     reward = max(reward, 1e-3)
