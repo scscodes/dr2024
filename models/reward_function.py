@@ -6,12 +6,12 @@ def reward_function(params):
     # initialize constants; REGMSERIES;
     reward = 1.0
     MIN_SPEED = 0.5
-    MAX_SPEED = 3.0
+    MAX_SPEED = 2.75
     OPTIMAL_SPEED = abs((MIN_SPEED + MAX_SPEED) / 2)
     STEP_INTERVAL = 5  # steps to complete before evaluation
     DIRECTION_THRESHOLD = 20.0  # +/- degrees
 
-    LINEAR_THRESHOLD = 0.6  # acceptable diff to satisfy linear regression
+    LINEAR_THRESHOLD = 0.30  # acceptable diff to satisfy linear regression
     STEERING_ANGLE_THRESHOLD = 15.0  # acceptable steering angle cap
 
     # input parameters
@@ -51,10 +51,14 @@ def reward_function(params):
         return center_agent_heading_diff
 
     def calc_turn_angle(waypoints, current_index, linear_waypoints):
-        current_slope = calc_linear_and_slope(linear_waypoints)[1]
+        linear_check, current_slope = calc_linear_and_slope(linear_waypoints)
+        if not linear_check or current_slope is None:
+            return 0
         next_index = (current_index + 3) % len(waypoints)
         if next_index < len(waypoints):
-            next_slope = calc_linear_and_slope(waypoints[current_index:next_index + 1])[1]
+            next_check, next_slope = calc_linear_and_slope(waypoints[current_index:next_index + 1])
+            if not next_check or next_slope is None:
+                return 0
             angle = abs(math.degrees(math.atan(next_slope - current_slope)))
             return angle
         return 0
@@ -81,7 +85,7 @@ def reward_function(params):
         immediate_waypoints = waypoints[next_index:next_index + 3]
 
         linear_start, slope = calc_linear_and_slope(immediate_waypoints, LINEAR_THRESHOLD)
-        if not linear_start:
+        if not linear_start or slope is None:
             return [], None, next_index
 
         # relatively safe to iterate remaining waypoints
@@ -107,9 +111,9 @@ def reward_function(params):
     speed_diff = abs(speed - MIN_SPEED)
     speed_lower_diff = abs(MAX_SPEED-speed)
     if MIN_SPEED < speed < MAX_SPEED:
-        speed_reward += 1.0
+        speed_reward += 1
     if on_straight:
-        speed_reward += max(1, speed_diff*(len(linear_waypoints)/2))
+        speed_reward += max(1, speed_diff/2)
     else:
         speed_reward += 1e-3 #max(1, speed_lower_diff*(len(linear_waypoints)/2))
     reward += speed_reward
@@ -135,6 +139,13 @@ def reward_function(params):
                 turn_angle_reward *= 0.50
         else:
             turn_angle_reward += 1e-3
+
+        if safe_center_diff <= track_width * 0.05:
+            turn_angle_reward += 1.0
+        elif safe_center_diff <= track_width * 0.10:
+            turn_angle_reward += 0.50
+        elif safe_center_diff <= track_width * 0.20:
+            turn_angle_reward += 0.25
     reward += turn_angle_reward
 
     # Steps (progress/actions taken)
@@ -145,20 +156,20 @@ def reward_function(params):
 
     # Position relative to center
     offset_reward = 0
+    heading_multiplier = abs(2 * calc_centerline_heading_diff(waypoints, closest_waypoints, heading))
+    speed_multiplier = abs(1 * (MAX_SPEED/speed))
     if distance_from_center <= track_width * 0.03 and on_straight:
-        heading_multiplier = abs(4 * calc_centerline_heading_diff(waypoints, closest_waypoints, heading))
-        speed_multiplier = abs(2 * (MAX_SPEED/speed))
-        offset_reward += 3.0 + heading_multiplier + speed_multiplier
+        offset_reward = 3.0 + speed_multiplier + heading_multiplier
     elif distance_from_center <= track_width * 0.075:
-        offset_reward += 3.0
+        offset_reward = 3.0 + (speed_multiplier * 0.50)  + heading_multiplier
     elif distance_from_center <= track_width * 0.10:
-        offset_reward += 2.0
+        offset_reward = 2.0  + (heading_multiplier * 0.50)
     elif distance_from_center <= track_width * 0.20:
-        offset_reward = 0.0
+        offset_reward = 1.0  + (heading_multiplier * 0.20)
     elif distance_from_center <= track_width * 0.25:
-        offset_reward -= 1.0
+        offset_reward = 1e-3 + (heading_multiplier * 0.10)
     elif distance_from_center <= track_width * 0.50:
-        offset_reward -= 2.0
+        offset_reward = 0
     else:
         reward *= 0.98  # directly penalize base reward
         offset_reward = 0
