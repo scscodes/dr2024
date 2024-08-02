@@ -25,7 +25,8 @@ def reward_function(params):
     # OPTIMAL_SPEED = abs((MIN_SPEED + MAX_SPEED) / 2)
     STEP_INTERVAL = 5  # steps to complete before evaluation
     DIRECTION_THRESHOLD = 15.0  # +/- degrees
-    MAX_DISTANCE = 0.10  # Max distance from the race line to reward
+    LOOK_AHEAD = 15  # qty upcoming points to consider for curvature
+    MAX_DISTANCE = 0.08  # acceptable distance from optimized race line
     LINEAR_THRESHOLD = 0.30  # acceptable diff to satisfy linear regression
     STEERING_ANGLE_THRESHOLD = 12.5  # acceptable steering angle cap
     CURRENT_INDEX = params['closest_waypoints'][1]
@@ -188,18 +189,50 @@ def reward_function(params):
                                     [ 5.04772305,  0.56220838],
                                     [ 5.04771315,  0.73385354]])
 
-    # Calculate distance to the nearest point on the optimized race line
-    car_position = np.array([x, y])
-    distances = np.linalg.norm(optimized_race_line - car_position, axis=1)
-    min_distance = np.min(distances)
+    def get_intermediate_rewards(speed, progress, steps, steering_angle):
+        def calc_steering_ir(steering_angle, speed):
+            # reward smaller steering angles and throttle limits
+            _steering_reward = 1
+            # diff between current/max angle, as float
+            _remaining_cap = 1 - abs(steering_angle) / STEERING_ANGLE_THRESHOLD
+            if abs(steering_angle) < STEERING_ANGLE_THRESHOLD:
+                _steering_reward += 1 * _remaining_cap
+                # penalize excessive speed when high steering angle
+                if speed > (MAX_SPEED * _remaining_cap):
+                    _steering_reward *= _remaining_cap
+                else:
+                    _steering_reward += _remaining_cap
+            else:
+                _steering_reward *= 0.50  # outside tolerance
+            return _steering_reward
 
-    def calc_intermediate_rewards(speed, progress, steps, steering_angle):
+        def calc_step_ir(progress, steps):
+            # reward intermediate and milestone progress
+            _step_ir = 1
+            if steps % STEP_INTERVAL == 0:
+                _step_ir += 1 * abs(progress/steps)
+            if round(progress) in [10, 25, 50, 75, 100]:
+                _step_ir += abs(progress * 0.10)
+            return _step_ir
+
         speed_ir = 1 if MIN_SPEED < speed < MAX_SPEED else 0
-        step_ir = 1 * abs(progress / steps) if (steps % STEP_INTERVAL) == 0 else 1e-3
-        steering_ir = 1 * (1 - abs(steering_angle) / STEERING_ANGLE_THRESHOLD) if abs(steering_angle) <= STEERING_ANGLE_THRESHOLD else 1e-3
+        step_ir = calc_step_ir(progress, steps) 
+        steering_ir = calc_steering_ir(steering_angle, speed)
         return speed_ir + step_ir + steering_ir
 
-    def calc_curvature(optimized_race_line, current_index, num_points=10):
+    def get_speed_angle_reward(curve, speed):
+        # return reward based on speed and angle ratio
+        line_ir = 0
+        if curve >= 0:
+            if curve > 0.50: # penalize high angle+high speed
+                line_ir += 1 if speed < MAX_SPEED*(1-curve) else -1
+            else:  # penalize low angle+low speed
+                line_ir += 1 if speed > MAX_SPEED*curve else -1
+        else:
+            line_ir = 1e-3
+        return line_ir
+
+    def calc_curvature(optimized_race_line, current_index, num_points):
         def curvature(x1, y1, x2, y2, x3, y3):
             numerator = 2 * abs((x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1))
             denominator = np.sqrt(((x2 - x1)**2 + (y2 - y1)**2) * ((x3 - x2)**2 + (y3 - y2)**2) * ((x3 - x1)**2 + (y3 - y1)**2))
@@ -223,26 +256,29 @@ def reward_function(params):
 
         return curvatures
 
-    curvatures = calc_curvature(optimized_race_line, CURRENT_INDEX, num_points=10)
-    average_curve = np.mean(curvatures)
-    normalized_curve = average_curve / (average_curve + 1)  # between 0-1
+    def calc_normalized_curve(optimized_race_line, look_ahead):
+        curvatures = calc_curvature(optimized_race_line, CURRENT_INDEX, num_points=look_ahead)
+        average_curve = np.mean(curvatures)
+        return average_curve / (average_curve + 1)
 
+    # Calculate normalized curve
+    car_position = np.array([x, y])
+    distances = np.linalg.norm(optimized_race_line - car_position, axis=1)
+    min_distance = np.min(distances)
+    normalized_curve = calc_normalized_curve(optimized_race_line, LOOK_AHEAD)
+    
     # Apply intermediate, base reward values
-    reward += calc_intermediate_rewards(speed, progress, steps, steering_angle)
+    reward += get_intermediate_rewards(speed, progress, steps, steering_angle)
 
-    # Reward speed (high/low) relative to upcoming curve (high: 1 / low: 0)
-    if normalized_curve >= 0:
-        # 1-curve * (speed/max) = straighter curve, higher speed
-        # curve * (max-speed)/max = higher curve, slower speed
-        curve_speed_reward = (1-normalized_curve) * (speed/MAX_SPEED) + normalized_curve * (MAX_SPEED-speed)/MAX_SPEED
-    else:
-        curve_speed_reward = 1e-3
-    reward += curve_speed_reward
+    # Apply reward for speed:angle ratio
+    reward += get_speed_angle_reward(normalized_curve, speed) 
 
     # Reward for staying close to the optimized race line
     obedient_reward = 0
     if min_distance < MAX_DISTANCE:
         obedient_reward = 4.00 * (MAX_DISTANCE - min_distance) / MAX_DISTANCE
+        if min_distance < (MAX_DISTANCE / 2):
+            obedient_reward *= 1.5  # bonus multiplier for being closer 
     else:
         reward = 1e-3  # Minimum reward if too far from the race line
     reward += obedient_reward
