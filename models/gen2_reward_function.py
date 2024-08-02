@@ -25,8 +25,8 @@ def reward_function(params):
     # OPTIMAL_SPEED = abs((MIN_SPEED + MAX_SPEED) / 2)
     STEP_INTERVAL = 4  # steps to complete before evaluation
     HEADING_THRESHOLD = 12.5  # yaw, agent heading
-    LOOK_AHEAD = 15  # qty upcoming points to consider for curvature
-    MAX_DISTANCE = 0.08  # acceptable distance from optimized race line
+    LOOK_AHEAD = 10  # qty upcoming points to consider for curvature
+    MAX_DISTANCE = 0.06  # acceptable distance from optimized race line
     LINEAR_THRESHOLD = 0.30  # acceptable diff to satisfy linear regression
     STEERING_ANGLE_THRESHOLD = 12.5  # acceptable steering angle cap
     CURRENT_INDEX = params['closest_waypoints'][1]
@@ -228,7 +228,7 @@ def reward_function(params):
 
         def calc_heading_ir(heading, speed):
             _heading_reward = 1
-            yaw_diff = calc_centerline_heading_diff(waypoints, closest_waypoints, heading)
+            yaw_diff = calc_centerline_heading_diff(optimized_race_line, closest_waypoints, heading)
             if abs(yaw_diff) < HEADING_THRESHOLD:
                 _heading_reward += 1
             elif abs(yaw_diff) < (HEADING_THRESHOLD * 1.10):  # 110% threshold
@@ -261,7 +261,7 @@ def reward_function(params):
         # return reward based on speed and angle ratio
         line_ir = 0
         if curve >= 0:
-            if curve > 0.50: # penalize high angle+high speed
+            if curve > 0.30: # penalize high angle+high speed
                 line_ir += 1 if speed < MAX_SPEED*(1-curve) else -1
             else:  # penalize low angle+low speed
                 line_ir += 1 if speed > MAX_SPEED*curve else -1
@@ -301,6 +301,12 @@ def reward_function(params):
     # Calculate normalized curve
     car_position = np.array([x, y])
     distances = np.linalg.norm(optimized_race_line - car_position, axis=1)
+    # Find nearest Optimized waypoints/indexes
+    closest_opt_index = np.argmin(distances)
+    previous_opt_waypoint = closest_index - 1 if closest_index > 0 else len(optimized_race_line) - 1
+    next_opt_waypoint = closest_index + 1 if closest_index < len(optimized_race_line) - 1 else 0
+    closest_optimized_waypoints = [previous_opt_waypoint, next_opt_waypoint]
+
     min_distance = np.min(distances)
     normalized_curve = calc_normalized_curve(optimized_race_line, LOOK_AHEAD)
     
