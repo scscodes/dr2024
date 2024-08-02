@@ -20,11 +20,11 @@ def reward_function(params):
     is_crashed = params['is_crashed']
 
     reward = 1.0
-    MIN_SPEED = 0.5
+    MIN_SPEED = 0.8
     MAX_SPEED = 3.00
     # OPTIMAL_SPEED = abs((MIN_SPEED + MAX_SPEED) / 2)
-    STEP_INTERVAL = 5  # steps to complete before evaluation
-    DIRECTION_THRESHOLD = 15.0  # +/- degrees
+    STEP_INTERVAL = 4  # steps to complete before evaluation
+    HEADING_THRESHOLD = 12.5  # yaw, agent heading
     LOOK_AHEAD = 15  # qty upcoming points to consider for curvature
     MAX_DISTANCE = 0.08  # acceptable distance from optimized race line
     LINEAR_THRESHOLD = 0.30  # acceptable diff to satisfy linear regression
@@ -189,7 +189,25 @@ def reward_function(params):
                                     [ 5.04772305,  0.56220838],
                                     [ 5.04771315,  0.73385354]])
 
-    def get_intermediate_rewards(speed, progress, steps, steering_angle):
+
+    def calc_centerline_heading_diff(waypoints, closest_waypoints, agent_heading):
+        # return difference in heading value, between agent and centerline
+        def calc_heading(point1, point2, in_degrees: bool = True):
+            # return a heading in degrees (easier conditions) or radians (easier math)
+            delta_y = point2[1] - point1[1]
+            delta_x = point2[0] - point1[0]
+            heading_rad = math.atan2(delta_y, delta_x)
+            return math.degrees(heading_rad) if in_degrees else heading_rad
+        agent_heading_rad = math.radians(agent_heading)
+        if closest_waypoints[1] < len(waypoints) - 1:
+            center_heading_rad = calc_heading(waypoints[closest_waypoints[0]], waypoints[closest_waypoints[1]], False)
+        else:
+            center_heading_rad = calc_heading(waypoints[closest_waypoints[0]], waypoints[closest_waypoints[0] - 1], False)
+
+        center_agent_heading_diff = abs(agent_heading_rad - center_heading_rad)
+        return center_agent_heading_diff
+
+    def get_intermediate_rewards(speed, progress, steps, steering_angle, heading):
         def calc_steering_ir(steering_angle, speed):
             # reward smaller steering angles and throttle limits
             _steering_reward = 1
@@ -202,9 +220,27 @@ def reward_function(params):
                     _steering_reward *= _remaining_cap
                 else:
                     _steering_reward += _remaining_cap
-            else:
-                _steering_reward *= 0.50  # outside tolerance
+            else:  # outside tolerance, penalize base and speed
+                _steering_reward *= 0.50
+                if speed > (MAX_SPEED * _remaining_cap):
+                    _steering_reward *= _remaining_cap
             return _steering_reward
+
+        def calc_heading_ir(heading, speed):
+            _heading_reward = 1
+            yaw_diff = calc_centerline_heading_diff(waypoints, closest_waypoints, heading)
+            if abs(yaw_diff) < HEADING_THRESHOLD:
+                _heading_reward += 1
+            elif abs(yaw_diff) < (HEADING_THRESHOLD * 1.10):  # 110% threshold
+                _heading_reward += 1 * (HEADING_THRESHOLD * 0.90)  # 10% reduction
+                if speed > (MAX_SPEED * 0.50):
+                    _heading_reward *= 0.50 
+            else:
+                if speed > (MAX_SPEED * 0.50):
+                    _heading_reward *= 0.20
+                else:
+                    _heading_reward *= 0.25
+            return  _heading_reward
 
         def calc_step_ir(progress, steps):
             # reward intermediate and milestone progress
@@ -216,9 +252,10 @@ def reward_function(params):
             return _step_ir
 
         speed_ir = 1 if MIN_SPEED < speed < MAX_SPEED else 0
-        step_ir = calc_step_ir(progress, steps) 
         steering_ir = calc_steering_ir(steering_angle, speed)
-        return speed_ir + step_ir + steering_ir
+        heading_ir = calc_heading_ir(heading, speed)        
+        step_ir = calc_step_ir(progress, steps) 
+        return speed_ir + steering_ir + heading_ir + step_ir
 
     def get_speed_angle_reward(curve, speed):
         # return reward based on speed and angle ratio
@@ -268,7 +305,7 @@ def reward_function(params):
     normalized_curve = calc_normalized_curve(optimized_race_line, LOOK_AHEAD)
     
     # Apply intermediate, base reward values
-    reward += get_intermediate_rewards(speed, progress, steps, steering_angle)
+    reward += get_intermediate_rewards(speed, progress, steps, steering_angle, heading)
 
     # Apply reward for speed:angle ratio
     reward += get_speed_angle_reward(normalized_curve, speed) 
