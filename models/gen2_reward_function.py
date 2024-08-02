@@ -2,17 +2,6 @@ import math
 import numpy as np
 
 def reward_function(params):
-    # Constants
-    reward = 1.0
-    MIN_SPEED = 0.5
-    MAX_SPEED = 2.75
-    OPTIMAL_SPEED = abs((MIN_SPEED + MAX_SPEED) / 2)
-    STEP_INTERVAL = 5  # steps to complete before evaluation
-    DIRECTION_THRESHOLD = 15.0  # +/- degrees
-    MAX_DISTANCE = 0.50  # Max distance from the race line to reward
-    LINEAR_THRESHOLD = 0.30  # acceptable diff to satisfy linear regression
-    STEERING_ANGLE_THRESHOLD = 12.5  # acceptable steering angle cap
-
     # input parameters
     all_wheels_on_track = params['all_wheels_on_track']
     x = params['x']
@@ -30,121 +19,16 @@ def reward_function(params):
     is_offtrack = params['is_offtrack']
     is_crashed = params['is_crashed']
 
-    def is_linear(segment, tolerance=LINEAR_THRESHOLD):
-        x_coords = [point[0] for point in segment]
-        y_coords = [point[1] for point in segment]
-        A = np.vstack([x_coords, np.ones(len(x_coords))]).T
-        m, c = np.linalg.lstsq(A, y_coords, rcond=None)[0]
-
-        for x, y in zip(x_coords, y_coords):
-            y_estimated = m * x + c
-            if abs(y - y_estimated) > tolerance:
-                return False
-        return True
-
-    def identify_linear_segment(previous_points, upcoming_points, tolerance=LINEAR_THRESHOLD):
-        """
-        Returns previous, upcoming and (total) current segment lists.
-        """
-        # init lists to store computed segment
-        p_segment = []
-        u_segment = []
-        segment = []
-        # check initial linear condition
-        p1 = previous_points[0]
-        u0 = upcoming_points[0]
-        u1 = upcoming_points[1]
-        init_segment = [p1, u0, u1]
-
-        if not is_linear(init_segment, tolerance):
-            # print('Initial segment is not linear with given tolerance.')
-            # print('Segment:', init_segment, 'Tolerance:', tolerance)
-            return np.array(p_segment), np.array(u_segment), np.array(segment)
-
-        segment = init_segment
-
-        u_segment = []
-        for wp in upcoming_points:
-            segment.append(wp)
-            if not is_linear(segment, tolerance):
-                segment.pop()
-                break
-            u_segment.append(wp)
-
-        p_segment = []
-        for wp in previous_points:
-            segment.insert(0, wp)
-            if not is_linear(segment, tolerance):
-                segment.pop(0)
-                break
-            p_segment.insert(0, wp)
-
-        return np.array(p_segment), np.array(u_segment), np.array(segment)
-
-    def split_waypoints(points, closest_waypoints):
-        # circular split list, from given closest (next) waypoint
-        index = closest_waypoints[1]
-        if not (0 <= index < len(points)):
-            raise ValueError('index out of range')
-
-        n = len(points)
-        _upcoming_points: list = []
-        _previous_points: list = []
-
-        for i in range(index, index + (n//2)):
-            _upcoming_points.append(points[i % n])
-
-        for i in range(index - 1, index - 1 - (n//2), -1):
-            _previous_points.append(points[i % n])
-
-        return _previous_points, _upcoming_points
-
-    # Applied logic and calculations, relative to current position
-    previous_points, upcoming_points = split_waypoints(waypoints, closest_waypoints)
-    # Define linear segment, if its within tolerance
-    p_points, u_points, current_segment = identify_linear_segment(previous_points, upcoming_points)
-    # segment_remaining = round(len(u_points) / len(current_segment), 3) if len(current_segment) > 0 and len(u_points) > 0 else 0.00
-
-    segment_reward = 0
-    if len(u_points) >= 10:
-        segment_reward += 1 * abs(speed - MIN_SPEED)
-    elif len(u_points) >= 8:
-        segment_reward += 1
-        if speed >= (MAX_SPEED * 0.60):
-            segment_reward *= 0.60
-        else:
-            segment_reward += 0.60
-    elif len(u_points) >= 3:
-        segment_reward += 1
-        if speed >= (MAX_SPEED * 0.40):
-            segment_reward *= 0.40
-            reward *= 0.80
-        else:
-            segment_reward += 0.40
-    reward += segment_reward
-
-    # Intermediate rewards
-    speed_reward = 0
-    if MIN_SPEED < speed < MAX_SPEED and all_wheels_on_track:
-        speed_reward += 1
-    reward += speed_reward
-
-    step_reward = 1e-3
-    if (steps % STEP_INTERVAL) == 0:
-        step_reward = progress / steps
-    reward += step_reward
-
-    # Stability in steering and alignment
-    steering_reward = 0
-    if abs(steering_angle) <= STEERING_ANGLE_THRESHOLD:
-        steering_reward += 2
-    elif abs(steering_angle) <= STEERING_ANGLE_THRESHOLD * 1.25:
-        steering_reward -= 1.5 * abs(MAX_SPEED - speed)
-    elif abs(steering_angle) <= STEERING_ANGLE_THRESHOLD * 1.5:
-        steering_reward -= 1 * abs(MAX_SPEED - speed)
-    else:
-        reward = 1e-3  # what are you doing @ this point. pls dont.
-    reward += steering_reward
+    reward = 1.0
+    MIN_SPEED = 0.5
+    MAX_SPEED = 3.00
+    # OPTIMAL_SPEED = abs((MIN_SPEED + MAX_SPEED) / 2)
+    STEP_INTERVAL = 5  # steps to complete before evaluation
+    DIRECTION_THRESHOLD = 15.0  # +/- degrees
+    MAX_DISTANCE = 0.10  # Max distance from the race line to reward
+    LINEAR_THRESHOLD = 0.30  # acceptable diff to satisfy linear regression
+    STEERING_ANGLE_THRESHOLD = 12.5  # acceptable steering angle cap
+    CURRENT_INDEX = params['closest_waypoints'][1]
 
     # Optimized race line coordinates
     optimized_race_line = np.array([[ 5.04771315,  0.73385354],
@@ -309,15 +193,60 @@ def reward_function(params):
     distances = np.linalg.norm(optimized_race_line - car_position, axis=1)
     min_distance = np.min(distances)
 
+    def calc_intermediate_rewards(speed, progress, steps, steering_angle):
+        speed_ir = 1 if MIN_SPEED < speed < MAX_SPEED else 0
+        step_ir = 1 * abs(progress / steps) if (steps % STEP_INTERVAL) == 0 else 1e-3
+        steering_ir = 1 * (1 - abs(steering_angle) / STEERING_ANGLE_THRESHOLD) if abs(steering_angle) <= STEERING_ANGLE_THRESHOLD else 1e-3
+        return speed_ir + step_ir + steering_ir
+
+    def calc_curvature(optimized_race_line, current_index, num_points=10):
+        def curvature(x1, y1, x2, y2, x3, y3):
+            numerator = 2 * abs((x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1))
+            denominator = np.sqrt(((x2 - x1)**2 + (y2 - y1)**2) * ((x3 - x2)**2 + (y3 - y2)**2) * ((x3 - x1)**2 + (y3 - y1)**2))
+            if denominator == 0:
+                return 0  # To avoid division by zero
+            return numerator / denominator
+
+        curvatures = []
+
+        for i in range(current_index, current_index + num_points - 2):
+            i1 = i % len(optimized_race_line)
+            i2 = (i + 1) % len(optimized_race_line)
+            i3 = (i + 2) % len(optimized_race_line)
+
+            x1, y1 = optimized_race_line[i1]
+            x2, y2 = optimized_race_line[i2]
+            x3, y3 = optimized_race_line[i3]
+
+            curv = curvature(x1, y1, x2, y2, x3, y3)
+            curvatures.append(curv)
+
+        return curvatures
+
+    curvatures = calc_curvature(optimized_race_line, CURRENT_INDEX, num_points=10)
+    average_curve = np.mean(curvatures)
+    normalized_curve = average_curve / (average_curve + 1)  # between 0-1
+
+    # Apply intermediate, base reward values
+    reward += calc_intermediate_rewards(speed, progress, steps, steering_angle)
+
+    # Reward speed (high/low) relative to upcoming curve (high: 1 / low: 0)
+    if normalized_curve >= 0:
+        # 1-curve * (speed/max) = straighter curve, higher speed
+        # curve * (max-speed)/max = higher curve, slower speed
+        curve_speed_reward = (1-normalized_curve) * (speed/MAX_SPEED) + normalized_curve * (MAX_SPEED-speed)/MAX_SPEED
+    else:
+        curve_speed_reward = 1e-3
+    reward += curve_speed_reward
+
     # Reward for staying close to the optimized race line
     obedient_reward = 0
     if min_distance < MAX_DISTANCE:
-        obedient_reward += 3 + (MAX_DISTANCE - min_distance) / MAX_DISTANCE
+        obedient_reward = 4.00 * (MAX_DISTANCE - min_distance) / MAX_DISTANCE
     else:
         reward = 1e-3  # Minimum reward if too far from the race line
     reward += obedient_reward
 
-    # Additional conditions to penalize offtrack and crashes
     if is_offtrack or is_crashed or not all_wheels_on_track:
         reward = 1e-3
 
