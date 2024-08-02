@@ -9,10 +9,10 @@ def reward_function(params):
     MAX_SPEED = 2.75
     OPTIMAL_SPEED = abs((MIN_SPEED + MAX_SPEED) / 2)
     STEP_INTERVAL = 5  # steps to complete before evaluation
-    DIRECTION_THRESHOLD = 20.0  # +/- degrees
+    DIRECTION_THRESHOLD = 15.0  # +/- degrees
 
     LINEAR_THRESHOLD = 0.30  # acceptable diff to satisfy linear regression
-    STEERING_ANGLE_THRESHOLD = 15.0  # acceptable steering angle cap
+    STEERING_ANGLE_THRESHOLD = 12.5  # acceptable steering angle cap
 
     # input parameters
     all_wheels_on_track = params['all_wheels_on_track']
@@ -104,48 +104,44 @@ def reward_function(params):
     ############ APPLY AND RETURN REWARD ############
 
     linear_waypoints, slope, corner_index = parse_upcoming_waypoints(waypoints, closest_waypoints)
-    on_straight = len(linear_waypoints) > 7
+    on_straight = len(linear_waypoints) >= 5
 
     # Speed
     speed_reward = 0
-    speed_diff = abs(speed - MIN_SPEED)
-    speed_lower_diff = abs(MAX_SPEED-speed)
     if MIN_SPEED < speed < MAX_SPEED:
         speed_reward += 1
-    if on_straight:
-        speed_reward += max(1, speed_diff/2)
+    if len(linear_waypoints) > 7 and all_wheels_on_track:
+        speed_reward += max(1, abs(speed - MIN_SPEED) * 0.50)
     else:
-        speed_reward += 1e-3 #max(1, speed_lower_diff*(len(linear_waypoints)/2))
+        speed_reward += max(1, abs(MAX_SPEED - speed) * 0.50)
     reward += speed_reward
 
     # Turning; reward navigation, but penalize excessive speeds
     turn_angle_reward = 0
-    if not on_straight:
+    if len(linear_waypoints) <= 7:
         safe_center_diff = abs(distance_from_center)
         turn_angle = calc_turn_angle(waypoints, corner_index, linear_waypoints)
         if turn_angle >= 90:
-            turn_angle_reward += 5
-            if speed >= (MAX_SPEED * 0.20):
-                reward *= 0.85 # directly penalize base reward
-                turn_angle_reward *= 1e-3
-        elif turn_angle >= 45:
             turn_angle_reward += 4
-            if speed >= (MAX_SPEED * 0.30):
-                reward *= 0.95 # directly penalize base reward
-                turn_angle_reward *= 0.25
-        elif turn_angle >= 10:
+            if speed >= (MAX_SPEED * 0.20):
+                reward *= 0.80  # directly penalize base reward
+                turn_angle_reward *= 0.05
+        elif turn_angle >= 45:
             turn_angle_reward += 3
+            if speed >= (MAX_SPEED * 0.30):
+                reward *= 0.80  # directly penalize base reward
+                turn_angle_reward *= 0.10
+        elif turn_angle >= 10:
+            turn_angle_reward += 2
+            if speed > (MAX_SPEED * 0.50):
+                turn_angle_reward *= 0.50
+        elif turn_angle == 0:
+            # some caution - could be problem in angle calculation
+            turn_angle_reward += 1
             if speed > (MAX_SPEED * 0.50):
                 turn_angle_reward *= 0.50
         else:
             turn_angle_reward += 1e-3
-
-        if safe_center_diff <= track_width * 0.05:
-            turn_angle_reward += 1.0
-        elif safe_center_diff <= track_width * 0.10:
-            turn_angle_reward += 0.50
-        elif safe_center_diff <= track_width * 0.20:
-            turn_angle_reward += 0.25
     reward += turn_angle_reward
 
     # Steps (progress/actions taken)
@@ -158,21 +154,19 @@ def reward_function(params):
     offset_reward = 0
     heading_multiplier = abs(2 * calc_centerline_heading_diff(waypoints, closest_waypoints, heading))
     speed_multiplier = abs(1 * (MAX_SPEED/speed))
-    if distance_from_center <= track_width * 0.03 and on_straight:
-        offset_reward = 3.0 + speed_multiplier + heading_multiplier
+    if distance_from_center <= track_width * 0.03 and len(linear_waypoints) >= 7:
+        offset_reward = 3.0 + speed_multiplier
     elif distance_from_center <= track_width * 0.075:
-        offset_reward = 3.0 + (speed_multiplier * 0.50)  + heading_multiplier
+        offset_reward = 3.0
     elif distance_from_center <= track_width * 0.10:
-        offset_reward = 2.0  + (heading_multiplier * 0.50)
+        offset_reward = 2.0
     elif distance_from_center <= track_width * 0.20:
-        offset_reward = 1.0  + (heading_multiplier * 0.20)
+        offset_reward = 1.0
     elif distance_from_center <= track_width * 0.25:
-        offset_reward = 1e-3 + (heading_multiplier * 0.10)
-    elif distance_from_center <= track_width * 0.50:
+        offset_reward = 0.50
+    elif distance_from_center > track_width * 0.50:
         offset_reward = 0
-    else:
-        reward *= 0.98  # directly penalize base reward
-        offset_reward = 0
+        reward *= 0.98
     reward += offset_reward
 
     # Penalize distracted driving
@@ -187,17 +181,16 @@ def reward_function(params):
         reward = 1e-3  # what are you doing @ this point. pls dont.
     reward += steering_reward
 
-    # Penalize negative orientation
-    current_direction_diff = calc_centerline_heading_diff(waypoints, closest_waypoints, heading)
-    if abs(current_direction_diff) > DIRECTION_THRESHOLD:
-        reward = 1e-3
+    heading_diff_reward = 0
+    if abs(calc_centerline_heading_diff(waypoints, closest_waypoints, heading)) > DIRECTION_THRESHOLD:
+        if all_wheels_on_track:
+            heading_diff_reward += 1
+        if speed <= (MAX_SPEED * 0.20):
+            heading_diff_reward += 2
+    else:
+        reward *= 0.50
 
-    # Penalize negative termination states
-    if is_crashed or is_offtrack:
-        reward = 1e-3
-
-    # Penalize being off the track
-    if not all_wheels_on_track:
+    if is_crashed or is_offtrack or not all_wheels_on_track:
         reward = 1e-3
 
     # Ensure the reward is positive
