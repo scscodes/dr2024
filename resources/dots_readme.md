@@ -8,6 +8,8 @@
 
 ### Create base resources
 `./create-base-resources.sh <BASE_STACK_NAME> <YOUR_IP>`
+- this process will create an s3 bucket
+- if you are going to import to:from DR Console, the DOTS steps should use this created s3 bucket uri
 
 ### Update custom files: params and env
 `cd custom-files`

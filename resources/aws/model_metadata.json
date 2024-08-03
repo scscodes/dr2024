@@ -1,0 +1,19 @@
+{
+  "action_space": {
+    "steering_angle": {
+      "high": 12.5,
+      "low": -12.5
+    },
+    "speed": {
+      "high": 2.5,
+      "low": 0.5
+    }
+  },
+  "sensor": [
+    "STEREO_CAMERAS"
+  ],
+  "neural_network": "DEEP_CONVOLUTIONAL_NETWORK_SHALLOW",
+  "version": "5",
+  "training_algorithm": "sac",
+  "action_space_type": "continuous"
+}
