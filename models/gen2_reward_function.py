@@ -23,7 +23,6 @@ def reward_function(params):
     reward = 1.0
     MIN_SPEED = 1.0
     MAX_SPEED = 3.0
-    TRACK_WIDTH = 1.07
     # TRACK_LENGTH = 46.16
     # OPTIMAL_SPEED = abs((MIN_SPEED + MAX_SPEED) / 2)
     STEP_INTERVAL = 4  # steps to complete before evaluation
@@ -235,7 +234,7 @@ def reward_function(params):
             _heading_reward = 1
             yaw_diff = calc_centerline_heading_diff(optimized_race_line, closest_optimized_waypoints, heading)
             if abs(yaw_diff) < HEADING_THRESHOLD:
-                _heading_reward += 2
+                _heading_reward += 4
             elif abs(yaw_diff) < (HEADING_THRESHOLD * 1.10):  # 110% threshold
                 _heading_reward += 1 * (HEADING_THRESHOLD * 0.90)  # 10% reduction
                 if speed > (MAX_SPEED * 0.60):
@@ -260,16 +259,16 @@ def reward_function(params):
         steering_ir = calc_steering_ir(steering_angle, speed)
         heading_ir = calc_heading_ir(heading, speed, optimized_line, optimized_waypoints)
         step_ir = calc_step_ir(progress, steps)
-        return (speed_ir + steering_ir + heading_ir + step_ir) * 1.05 if all_wheels_on_track else 0.50
+        return (speed_ir + steering_ir + heading_ir + step_ir) * 1.05 if all_wheels_on_track else 0.60
 
     def get_speed_angle_reward(curve, speed):
         # return reward based on speed and angle ratio
         line_ir = 0
         if curve >= 0:
             if curve > 0.30:  # penalize high angle+high speed
-                line_ir += 1.5 if speed < MAX_SPEED * (1 - (curve * 0.90)) else 0
+                line_ir += 1.5 if speed < MAX_SPEED * (1 - (curve * 0.90)) else -1
             else:  # penalize low angle+low speed
-                line_ir += 1.5 if speed > MAX_SPEED * curve else 0
+                line_ir += 1.5 if speed > MAX_SPEED * curve else -1
         else:
             line_ir = 1e-3
         return line_ir
@@ -325,11 +324,11 @@ def reward_function(params):
     # Reward for staying close to the optimized race line
     obedient_reward = 0
     if min_distance < MAX_DISTANCE:
-        obedient_reward = 4.00 * (MAX_DISTANCE - min_distance) / MAX_DISTANCE
+        obedient_reward = 5.00 * (MAX_DISTANCE - min_distance) / MAX_DISTANCE
         if min_distance < (MAX_DISTANCE / 2):
-            obedient_reward *= 1.5  # bonus multiplier for being closer
-            if distance_from_center < (TRACK_WIDTH * 0.50) and all_wheels_on_track:
-                obedient_reward += 0.50
+            obedient_reward *= 1.50  # bonus multiplier for being closer
+        if distance_from_center < (track_width * 0.50):
+            obedient_reward *= 1.05
     else:
         reward = 1e-3  # Minimum reward if too far from the race line
     reward += obedient_reward
