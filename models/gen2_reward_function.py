@@ -30,7 +30,7 @@ def reward_function(params):
     LOOK_AHEAD = 5  # qty upcoming points to consider for curvature
     MAX_DISTANCE = 0.05  # acceptable distance from optimized race line
     LINEAR_THRESHOLD = 0.30  # acceptable diff to satisfy linear regression
-    STEERING_ANGLE_THRESHOLD = 10.0  # acceptable steering angle cap
+    STEERING_ANGLE_THRESHOLD = 12.5  # acceptable steering angle cap
     CURRENT_INDEX = params['closest_waypoints'][1]
 
     # Optimized race line coordinates
@@ -235,8 +235,8 @@ def reward_function(params):
             yaw_diff = calc_centerline_heading_diff(optimized_race_line, closest_optimized_waypoints, heading)
             if abs(yaw_diff) < HEADING_THRESHOLD:
                 _heading_reward += 4
-            elif abs(yaw_diff) < (HEADING_THRESHOLD * 1.10):  # 110% threshold
-                _heading_reward += 1 * (HEADING_THRESHOLD * 0.90)  # 10% reduction
+            elif abs(yaw_diff) < (HEADING_THRESHOLD * 1.01):  # 1% threshold
+                _heading_reward *= 0.75  # % reduction
                 if speed > (MAX_SPEED * 0.60):
                     _heading_reward *= 0.60
             else:
@@ -266,7 +266,7 @@ def reward_function(params):
         line_ir = 0
         if curve >= 0:
             if curve > 0.30:  # penalize high angle+high speed
-                line_ir += 1.5 if speed < MAX_SPEED * (1 - (curve * 0.95)) else -1
+                line_ir += 1.5 if speed < MAX_SPEED * (1 - (curve * 0.90)) else -1
             else:  # penalize low angle+low speed
                 line_ir += 1.5 if speed > MAX_SPEED * curve else -1
         else:
@@ -278,8 +278,10 @@ def reward_function(params):
         if min_distance < MAX_DISTANCE:
             prox_ir = 4.00 * (MAX_DISTANCE - min_distance) / MAX_DISTANCE
             if min_distance < (MAX_DISTANCE / 1.5):  # additional bonus for closer proximity
-                prox_ir *= 1.75
+                prox_ir *= 1.50
             if min_distance < (MAX_DISTANCE / 2):
+                prox_ir *= 1.05
+            if distance_from_center < (track_width * 0.51):  # additional bonus for slightly inside
                 prox_ir *= 1.50
         return prox_ir
 
