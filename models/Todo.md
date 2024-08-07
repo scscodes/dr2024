@@ -1,4 +1,3 @@
-increase curve threshold, from .50 to.... .30?
+linear speed
 
-
-centerline diff to optimized line diff?
+historical point:speed as base/min, extension of orl
