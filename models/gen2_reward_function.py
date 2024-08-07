@@ -266,7 +266,8 @@ def reward_function(params):
                 if speed < speed_threshold:
                     ratio_ir *= 2 * speed_multiplier
             elif curve_severity >= 20:
-                ratio_ir *= 2 * speed_multiplier
+                if speed < speed_threshold:
+                    ratio_ir *= 2 * speed_multiplier
             else:
                 ratio_ir += 2 * speed_multiplier
         else:
@@ -279,9 +280,11 @@ def reward_function(params):
         if min_distance < MAX_DISTANCE:
             prox_ir = 4.00 * (MAX_DISTANCE - min_distance) / MAX_DISTANCE
             if min_distance < (MAX_DISTANCE / 1.5):  # additional bonus for closer proximity
-                prox_ir *= 1.50
-            if distance_from_center < (track_width * 0.48):
                 prox_ir *= 2.00
+        if distance_from_center < (track_width * 0.48):
+            prox_ir *= 1.05
+        else:
+            prox_ir *= 0.00
         return prox_ir
 
     def calc_curvature(optimized_race_line, current_index, num_points):
