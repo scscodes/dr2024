@@ -21,14 +21,14 @@ def reward_function(params):
     is_crashed = params['is_crashed']
 
     reward = 1.0
-    MIN_SPEED = 0.50
+    MIN_SPEED = 0.75
     MAX_SPEED = 3.0
-    STEP_INTERVAL = 4  # steps to complete before evaluation
-    HEADING_THRESHOLD = 14.0  # yaw, agent heading
+    STEP_INTERVAL = 6  # steps to complete before evaluation
+    HEADING_THRESHOLD = 15  # yaw, agent heading
     LOOK_AHEAD = 6  # qty upcoming points to consider for curvature
-    MAX_DISTANCE = 0.03  # acceptable distance from optimized race line
+    MAX_DISTANCE = 0.02  # acceptable distance from optimized race line
     LINEAR_THRESHOLD = 0.30  # acceptable diff to satisfy linear regression
-    STEERING_ANGLE_THRESHOLD = 15.0  # acceptable steering angle cap
+    STEERING_ANGLE_THRESHOLD = 17.5  # acceptable steering angle cap
     CURRENT_INDEX = params['closest_waypoints'][1]
 
     # Optimized race line coordinates
@@ -257,13 +257,16 @@ def reward_function(params):
         # map normalized curve to a more readable severity level. higher normalized curvature = sharper/severe turn
         curve_severity = curve * 100  #  creates % for easier comprehension @ a glance
 
-        if MIN_SPEED < speed < speed_threshold:
+        if MIN_SPEED < speed < MAX_SPEED:
+            ratio_ir += 1
             if curve_severity >= 50:
-                ratio_ir += 5
+                if speed < speed_threshold:
+                    ratio_ir *= 2 * speed_multiplier
             elif curve_severity >= 40:
-                ratio_ir += 2
-            elif curve_severity >= 10:
-                ratio_ir += 2 + speed_multiplier
+                if speed < speed_threshold:
+                    ratio_ir *= 2 * speed_multiplier
+            elif curve_severity >= 20:
+                ratio_ir *= 2 * speed_multiplier
             else:
                 ratio_ir += 2 * speed_multiplier
         else:
