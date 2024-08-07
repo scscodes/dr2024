@@ -21,14 +21,14 @@ def reward_function(params):
     is_crashed = params['is_crashed']
 
     reward = 1.0
-    MIN_SPEED = 0.75
-    MAX_SPEED = 2.75
+    MIN_SPEED = 0.50
+    MAX_SPEED = 3.0
     STEP_INTERVAL = 4  # steps to complete before evaluation
-    HEADING_THRESHOLD = 12.5  # yaw, agent heading
-    LOOK_AHEAD = 8  # qty upcoming points to consider for curvature
-    MAX_DISTANCE = 0.05  # acceptable distance from optimized race line
+    HEADING_THRESHOLD = 14.0  # yaw, agent heading
+    LOOK_AHEAD = 6  # qty upcoming points to consider for curvature
+    MAX_DISTANCE = 0.03  # acceptable distance from optimized race line
     LINEAR_THRESHOLD = 0.30  # acceptable diff to satisfy linear regression
-    STEERING_ANGLE_THRESHOLD = 14.0  # acceptable steering angle cap
+    STEERING_ANGLE_THRESHOLD = 15.0  # acceptable steering angle cap
     CURRENT_INDEX = params['closest_waypoints'][1]
 
     # Optimized race line coordinates
@@ -226,9 +226,7 @@ def reward_function(params):
             if abs(yaw_diff) < HEADING_THRESHOLD:
                 _heading_reward += 4
             elif abs(yaw_diff) < (HEADING_THRESHOLD * 1.01):  # 1% threshold
-                _heading_reward *= 0.75  # % reduction
-                # if speed > (MAX_SPEED * 0.60):
-                #     _heading_reward *= 0.60
+                _heading_reward *= 0.75
             else:
                 if speed > (MAX_SPEED * 0.50):
                     _heading_reward *= 0.20
@@ -239,8 +237,8 @@ def reward_function(params):
         def calc_step_ir(progress, steps):
             # reward intermediate and milestone progress
             _step_ir = 1
-            if steps % STEP_INTERVAL == 0 and progress > 1:
-                _step_ir += 1 * abs(progress / steps)
+            if steps % STEP_INTERVAL == 0 and steps > 1:
+                _step_ir += 2 * abs(progress / steps)
             if round(progress) in [10, 25, 50, 75, 100]:
                 _step_ir += abs(progress * 0.15)
             return _step_ir
@@ -253,15 +251,25 @@ def reward_function(params):
 
     def get_speed_angle_reward(curve, speed):
         # return reward based on speed and angle ratio
-        line_ir = 0
-        if curve >= 0:
-            if curve > 0.30:  # penalize high angle+high speed
-                line_ir += 1.5 if speed < MAX_SPEED * (1 - (curve * 0.90)) else -1
-            else:  # penalize low angle+low speed
-                line_ir += 1.5 if speed > MAX_SPEED * curve else -1
+        ratio_ir = 0
+        speed_threshold = MAX_SPEED * curve  #  % of max speed
+        speed_multiplier = abs((speed - MIN_SPEED) / speed)  #  float diff
+        # map normalized curve to a more readable severity level. higher normalized curvature = sharper/severe turn
+        curve_severity = curve * 100  #  creates % for easier comprehension @ a glance
+
+        if MIN_SPEED < speed < speed_threshold:
+            if curve_severity >= 50:
+                ratio_ir += 5
+            elif curve_severity >= 40:
+                ratio_ir += 2
+            elif curve_severity >= 10:
+                ratio_ir += 2 + speed_multiplier
+            else:
+                ratio_ir += 2 * speed_multiplier
         else:
-            line_ir = 1e-3
-        return line_ir
+            ratio_ir *= 0
+        return ratio_ir
+
 
     def get_line_proximity_reward(min_distance):
         prox_ir = 0
@@ -269,8 +277,6 @@ def reward_function(params):
             prox_ir = 4.00 * (MAX_DISTANCE - min_distance) / MAX_DISTANCE
             if min_distance < (MAX_DISTANCE / 1.5):  # additional bonus for closer proximity
                 prox_ir *= 1.50
-            if min_distance < (MAX_DISTANCE / 2):
-                prox_ir *= 1.05
             if distance_from_center < (track_width * 0.48):
                 prox_ir *= 2.00
         return prox_ir
@@ -299,6 +305,7 @@ def reward_function(params):
         return curvatures
 
     def calc_normalized_curve(optimized_race_line, look_ahead):
+        # return average curvature between # of look_ahead points. between 0 - 1
         curvatures = calc_curvature(optimized_race_line, CURRENT_INDEX, num_points=look_ahead)
         average_curve = np.mean(curvatures)
         return average_curve / (average_curve + 1)
@@ -319,7 +326,11 @@ def reward_function(params):
                                        closest_optimized_waypoints)
 
     # Apply reward for speed:angle ratio
-    reward += get_speed_angle_reward(normalized_curve, speed)
+    speed_angle_reward = get_speed_angle_reward(normalized_curve, speed)
+    if speed_angle_reward == 0:
+        reward = 1e-3
+    else:
+        reward += speed_angle_reward
 
     # Apply reward for proximity to optimized race line
     line_proximity_reward = get_line_proximity_reward(min_distance)
