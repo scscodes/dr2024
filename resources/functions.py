@@ -22,13 +22,6 @@ def calc_angle(point1: tuple, point2: tuple, in_degrees: bool = True) -> float:
 # linear regression; check if points are linear, find slope
 LINEAR_THRESHOLD = 0.6
 def calc_linear_and_slope(points: list, tolerance: float=LINEAR_THRESHOLD) -> tuple:
-    """
-    Cast a line between points. Check if all points are within tolerance to be
-    considered linear (straight line). If so, return bool + slope of the line.
-    :param points: list[(x,y)...]
-    :param tolerance: float
-    :return: tuple(bool, int)
-    """
     x_coordinates = [point[0] for point in points]
     y_coordinates = [point[1] for point in points]
     # linear regression; flatten coordinates and find appropriate line
