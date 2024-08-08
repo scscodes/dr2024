@@ -29,7 +29,6 @@ def reward_function(params):
     MAX_DISTANCE = 0.03  # acceptable distance from optimized race line
     LINEAR_THRESHOLD = 0.30  # acceptable diff to satisfy linear regression
     STEERING_ANGLE_THRESHOLD = 20.0  # acceptable steering angle cap
-    CURRENT_INDEX = params['closest_waypoints'][1]
 
     # Optimized race line coordinates
     optimized_race_line = np.array([[5.04771315, 0.73385354],
@@ -189,6 +188,18 @@ def reward_function(params):
                                     [5.04772305, 0.56220838],
                                     [5.04771315, 0.73385354]])
 
+    # computed orl baseline
+    # calc distance between agent and closest point in orl
+    car_position = np.array([x, y])
+    distances = np.linalg.norm(optimized_race_line - car_position, axis=1)
+    min_distance = np.min(distances)  #  min distance between agent and orl (aka: closest)
+    
+    # calc and set closest optimized points
+    closest_opt_index = np.argmin(distances)  # nearest index in orl
+    previous_opt_waypoint = closest_opt_index - 1 if closest_opt_index > 0 else len(optimized_race_line) - 1
+    next_opt_waypoint = closest_opt_index + 1 if closest_opt_index < len(optimized_race_line) - 1 else 0
+    closest_optimized_waypoints = [previous_opt_waypoint, next_opt_waypoint]
+    
     def calc_centerline_heading_diff(waypoints, closest_waypoints, agent_heading):
         def calc_heading(point1, point2, in_degrees: bool = True):
             delta_y = point2[1] - point1[1]
@@ -285,7 +296,7 @@ def reward_function(params):
             prox_ir *= 0.00
         return prox_ir
 
-    def calc_curvature(optimized_race_line, current_index, num_points):
+    def calc_curvature(optimized_race_line, starting_index, num_points):
         def curvature(x1, y1, x2, y2, x3, y3):
             numerator = 2 * abs((x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1))
             denominator = np.sqrt(((x2 - x1) ** 2 + (y2 - y1) ** 2) * ((x3 - x2) ** 2 + (y3 - y2) ** 2) * (
@@ -294,7 +305,7 @@ def reward_function(params):
 
         curvatures = []
 
-        for i in range(current_index, current_index + num_points - 2):
+        for i in range(starting_index, starting_index + num_points - 2):
             i1 = i % len(optimized_race_line)
             i2 = (i + 1) % len(optimized_race_line)
             i3 = (i + 2) % len(optimized_race_line)
@@ -308,23 +319,14 @@ def reward_function(params):
 
         return curvatures
 
-    def calc_normalized_curve(optimized_race_line, look_ahead):
+    def calc_normalized_curve(optimized_race_line, starting_index, look_ahead=LOOK_AHEAD):
         # return average curvature between # of look_ahead points. between 0 - 1
-        curvatures = calc_curvature(optimized_race_line, CURRENT_INDEX, num_points=look_ahead)
+        curvatures = calc_curvature(optimized_race_line, starting_index, num_points=look_ahead)
         average_curve = np.mean(curvatures)
         return average_curve / (average_curve + 1)
 
-    # calc distance between agent and closest point in orl
-    car_position = np.array([x, y])
-    distances = np.linalg.norm(optimized_race_line - car_position, axis=1)
-    min_distance = np.min(distances)  #  min distance between agent and orl (aka: closest)
     # calc normalized curve; avg angles, returning float 0.00 to 1.00
-    normalized_curve = calc_normalized_curve(optimized_race_line, LOOK_AHEAD)
-    # calc and set closest optimized points
-    closest_opt_index = np.argmin(distances)  # nearest index in orl
-    previous_opt_waypoint = closest_opt_index - 1 if closest_opt_index > 0 else len(optimized_race_line) - 1
-    next_opt_waypoint = closest_opt_index + 1 if closest_opt_index < len(optimized_race_line) - 1 else 0
-    closest_optimized_waypoints = [previous_opt_waypoint, next_opt_waypoint]
+    normalized_curve = calc_normalized_curve(optimized_race_line, closest_opt_index, LOOK_AHEAD)
 
     # Apply intermediate, base reward values
     reward += get_intermediate_rewards(speed, progress, steps, steering_angle, heading, optimized_race_line,
