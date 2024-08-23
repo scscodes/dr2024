@@ -11,6 +11,30 @@ previous_waypoint = waypoints[closest_waypoints[0]]
 
 
 # angle between two points, as degrees or radians
+import pandas as pd
+
+def convert_csv_to_json(csv_file_path, json_file_path):
+    # Read the CSV file using pandas
+    df = pd.read_csv(csv_file_path)
+
+    # Convert the DataFrame to JSON format
+    json_data = df.to_json(orient='records', indent=4)
+
+    # Write the JSON data to a file
+    with open(json_file_path, 'w') as json_file:
+        json_file.write(json_data)
+
+    return json_file_path
+
+# Specify file paths
+# csv_file_path = '/mnt/data/tracks.csv'
+# json_file_path = '/mnt/data/tracks.json'
+#
+# # Convert the CSV to JSON
+# convert_csv_to_json(csv_file_path, json_file_path)
+
+
+
 def calc_angle(point1: tuple, point2: tuple, in_degrees: bool = True) -> float:
     # return angle (heading) between two points, in degrees (easier conditions) or radians (easier math)
     delta_y = point2[1] - point1[1]
