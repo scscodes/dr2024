@@ -334,10 +334,11 @@ def reward_function(params):
     reward = 1
 
     ## Reward if car goes close to optimal racing line ##
-    DISTANCE_MULTIPLE = 1
+    DISTANCE_MULTIPLE = 3
     dist = dist_to_racing_line(optimals[0:2], optimals_second[0:2], [x, y])
-    distance_reward = max(1e-3, 1 - (dist/(track_width*0.6)))
-    reward += distance_reward * DISTANCE_MULTIPLE
+    distance_reward = max(1e-3, (1 - (dist / (track_width * 0.5)))**2)
+    dynamic_multiple = max(1, (track_width * 0.5) / (dist + 1e-3))
+    reward += distance_reward * DISTANCE_MULTIPLE * dynamic_multiple
 
     ## Reward if speed is close to optimal speed ##
     SPEED_DIFF_NO_REWARD = 1
@@ -351,8 +352,8 @@ def reward_function(params):
 
     # Reward if less steps
     REWARD_PER_STEP_FOR_FASTEST_TIME = 1
-    STANDARD_TIME = 21
-    FASTEST_TIME = 18
+    STANDARD_TIME = 23
+    FASTEST_TIME = 20
     times_list = [row[3] for row in racing_track]
     projected_time = projected_time(first_racingpoint_index, closest_index, steps, times_list)
     try:
@@ -377,8 +378,8 @@ def reward_function(params):
 
     ## Incentive for finishing the lap in less steps ##
     REWARD_FOR_FASTEST_TIME = 1000 # should be adapted to track length and other rewards
-    STANDARD_TIME = 22  # seconds (time that is easily done by model)
-    FASTEST_TIME = 18  # seconds (best time of 1st place on the track)
+    STANDARD_TIME = 23  # seconds (time that is easily done by model)
+    FASTEST_TIME = 20  # seconds (best time of 1st place on the track)
     if progress == 100:
         finish_reward = max(1e-3, (-REWARD_FOR_FASTEST_TIME /
                                    (15*(STANDARD_TIME-FASTEST_TIME)))*(steps-STANDARD_TIME*15))
@@ -390,7 +391,7 @@ def reward_function(params):
     if not all_wheels_on_track:
         reward = 1e-3
     else:
-        reward *= 1.02
+        reward *= 1.05
 
     # Always return a float value
     return float(reward)
