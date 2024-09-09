@@ -1,4 +1,5 @@
 import math
+import numpy as np
 def reward_function(params):
     ################## INPUT PARAMETERS ###################
     all_wheels_on_track = params['all_wheels_on_track']
@@ -309,8 +310,88 @@ def reward_function(params):
 
         return projected_time
 
-    #################### REWARD FUNCTIONS ######################
 
+    def identify_segments(points, linear_threshold=0.1, turn_threshold=0.3, min_linear_points=4, is_ccw=False):
+        segments = []
+
+        def calculate_curvature(point1, point2, point3):
+            # Calculate the curvature using three points
+            a = np.linalg.norm(np.array(point1) - np.array(point2))
+            b = np.linalg.norm(np.array(point2) - np.array(point3))
+            c = np.linalg.norm(np.array(point3) - np.array(point1))
+            if a * b * c == 0:
+                return 0
+            # Adding a zero z-component to the 2D vectors
+            point1_3d = np.array([point1[0], point1[1], 0])
+            point2_3d = np.array([point2[0], point2[1], 0])
+            point3_3d = np.array([point3[0], point3[1], 0])
+            return (4 * np.linalg.norm(np.cross(point2_3d - point1_3d, point3_3d - point1_3d))) / (a * b * c)
+
+        def determine_turn_direction(point1, point2, point3, is_ccw):
+            # Determine the direction of the turn
+            turn_vector = (point3[0] - point2[0]) * (point2[1] - point1[1]) - (point3[1] - point2[1]) * (point2[0] - point1[0])
+            if is_ccw:
+                return 'right' if turn_vector > 0 else 'left'
+            else:
+                return 'left' if turn_vector > 0 else 'right'
+
+        start_index = 0
+        segment_type = 'linear'
+        for i in range(1, len(points) - 1):
+            curvature = calculate_curvature(points[i-1], points[i], points[i+1])
+            if curvature > turn_threshold and segment_type == 'linear':
+                if i - 1 > start_index and i - start_index >= min_linear_points:
+                    segments.append({
+                        'start_index': start_index,
+                        'end_index': i-1,
+                        'type': 'linear',
+                        'curvature': curvature
+                    })
+                    start_index = i-1
+                    segment_type = 'turn'
+                else:
+                    # Merge gap into the turn
+                    segment_type = 'turn'
+            elif curvature <= linear_threshold and segment_type == 'turn':
+                if i - start_index >= min_linear_points:
+                    turn_direction = determine_turn_direction(points[start_index-1], points[start_index], points[i], is_ccw)
+                    segments.append({
+                        'start_index': start_index,
+                        'end_index': i-1,
+                        'type': 'turn',
+                        'direction': turn_direction,
+                        'curvature': curvature
+                    })
+                    start_index = i-1
+                    segment_type = 'linear'
+                else:
+                    # Merge gap into the turn
+                    segment_type = 'turn'
+
+        # Handle the last segment
+        if start_index < len(points) - 1:
+            segment_curvature = calculate_curvature(points[start_index-1], points[start_index], points[-1]) if start_index > 0 else 0
+            segments.append({
+                'start_index': start_index,
+                'end_index': len(points) - 1,
+                'type': segment_type,
+                'curvature': segment_curvature
+            })
+
+        return segments
+
+    def find_segment_by_index(segments, index):
+        for segment in segments:
+            if segment['start_index'] <= index <= segment['end_index']:
+                return segment
+        return None
+
+    #################### REWARD FUNCTIONS ######################
+    # default centerline point, segmentation
+    next_wp_index = closest_waypoints[1]
+    next_wp = waypoints[closest_waypoints[1]]
+    track_segments = identify_segments(waypoints, linear_threshold=0.3, turn_threshold=0.3, min_linear_points=5, is_ccw=True)
+    current_segment = find_segment_by_index(track_segments, next_wp_index)
 
     ############### OPTIMAL X,Y,SPEED,TIME ################
     # Get closest indexes for racing line (and distances to all points on racing line)
@@ -329,34 +410,53 @@ def reward_function(params):
 
     ################ REWARD AND PUNISHMENT ################
 
+    def _r_lane_choice(curr_segment=current_segment, agent_is_loc=is_left_of_center):
+        base_lane_reward = 2
+        seg_dir = curr_segment.get('direction', None)
+        if seg_dir == 'left':
+            if agent_is_loc:
+                base_lane_reward *= 2.0
+            else:
+                base_lane_reward *= 0.50
+        elif seg_dir == 'right':
+            if agent_is_loc:
+                base_lane_reward *= 0.50
+            else:
+                base_lane_reward *= 2.0
+
+        return base_lane_reward
     ## Define the default reward
     reward = 1
 
     ## Reward if car goes close to optimal racing line
-    DISTANCE_MULTIPLE = 3.0
+    DISTANCE_MULTIPLE = 2.15
     dist = dist_to_racing_line(optimals[0:2], optimals_second[0:2], [x, y])
-    distance_reward = max(1e-3, 1 - (dist/(track_width*0.1)))
+    distance_reward = max(1e-3, 1 - (dist/(track_width*0.3)))
     reward += distance_reward * DISTANCE_MULTIPLE
 
     ## Reward if speed is close to optimal speed
-    SPEED_DIFF_THRESHOLD = 1.25  # Threshold for applying diminishing rewards
-    SPEED_REWARD_MULTIPLE = 2.15  # Scaling factor for speed reward
+    SPEED_DIFF_THRESHOLD = 1.5  # Threshold for applying diminishing rewards
+    SPEED_MIN_PENALTY_THRESHOLD = 0.25  # Hard threshold for very slow speeds
+    SPEED_REWARD_MULTIPLE = 3.0  # Scaling factor for speed reward
 
     # Calculate the difference between optimal speed and current speed
     speed_diff = optimals[2] - speed
-    if speed < optimals[2]:
-        reward *= 0.90
-    elif abs(speed_diff) <= SPEED_DIFF_THRESHOLD:
+    speed_reward = (1 - (speed_diff / SPEED_DIFF_THRESHOLD) ** 2) ** 2
+    speed_reward *= _r_lane_choice()
+    if speed >= optimals[2]:
         # Quadratic penalty for deviation from optimal speed, favor speeds close to optimal
-        speed_reward = (1 - (speed_diff / SPEED_DIFF_THRESHOLD) ** 2) ** 2
+        speed_reward *= _r_lane_choice()
+    elif abs(speed_diff) <= SPEED_DIFF_THRESHOLD:
         reward += speed_reward * SPEED_REWARD_MULTIPLE
     elif 0.25 < speed_diff <= SPEED_DIFF_THRESHOLD:
         reward *= max(1e-3, 0.5 * (1 - speed_diff))  # Gradual penalty for being under-speed
+    elif speed_diff > SPEED_MIN_PENALTY_THRESHOLD:
+        reward = 1e-3  # Minimum reward for going too slow
 
     # Reward if less steps
     REWARD_PER_STEP_FOR_FASTEST_TIME = 2
-    STANDARD_TIME = 19
-    FASTEST_TIME = 17.1
+    STANDARD_TIME = 17.5
+    FASTEST_TIME = 16.9
     times_list = [row[3] for row in racing_track]
     projected_time = projected_time(first_racingpoint_index, closest_index, steps, times_list)
     try:
@@ -386,14 +486,14 @@ def reward_function(params):
         reward *= 0.8
 
     # Incentive for finishing the lap in less steps
-    REWARD_FOR_FASTEST_TIME = 750
-    STANDARD_TIME = 19
-    FASTEST_TIME = 17.1
+    REWARD_FOR_FASTEST_TIME = 1000
+    STANDARD_TIME = 17.5
+    FASTEST_TIME = 16.9
     if progress == 100:
         finish_reward = max(1e-3, (-REWARD_FOR_FASTEST_TIME /
                                    (15*(STANDARD_TIME-FASTEST_TIME)))*(steps-STANDARD_TIME*15))
     else:
-        finish_reward = progress * 0.5
+        finish_reward = progress * 0.1
     reward += finish_reward
 
     # Penalize off track

@@ -21,7 +21,7 @@ def reward_function(params):
     MAX_SPEED = 4
     MIN_SPEED = 1.5
     HALF_SPEED = (MAX_SPEED + MIN_SPEED)/2
-    LOOKAHEAD = 5
+    LOOKAHEAD = 7
     LINEAR_TOLERANCE = 0.1  # acceptable variance to be considered linear
 
     #################### RACING LINE ######################
@@ -383,16 +383,17 @@ def reward_function(params):
     def _r_lane_choice(curr_segment=current_segment, agent_is_loc=is_left_of_center):
         base_lane_reward = 2
         seg_dir = curr_segment.get('direction', None)
+        center_distance_multiplier = 1 - (distance_from_center / (track_width / 2))
         if seg_dir == 'left':
             if agent_is_loc:
                 base_lane_reward *= 2.0
             else:
-                base_lane_reward *= 0.50
+                base_lane_reward *= 0.50 * center_distance_multiplier
         elif seg_dir == 'right':
             if agent_is_loc:
                 base_lane_reward *= 0.50
             else:
-                base_lane_reward *= 2.0
+                base_lane_reward *= 2.0 * center_distance_multiplier
 
         return base_lane_reward
 
@@ -401,11 +402,15 @@ def reward_function(params):
         if is_linear_section:
             base_speed_reward *= speed_min_diff
         else:
-            base_speed_reward *= abs(1 - speed_half_diff)
+            speed_cushion = HALF_SPEED * 1.05
+            base_speed_reward *= abs(1 - speed_half_diff) + speed if speed_cushion >= speed else 0
+            lane_bonus = _r_lane_choice(curr_segment=current_segment, agent_is_loc=is_left_of_center)
+            base_speed_reward += lane_bonus if lane_bonus > 2 else 0
         return base_speed_reward
 
-    def _r_steering_stability(steering_angle, steering_threshold=20):
-        return 2.5 if abs(steering_angle) < steering_threshold else 1.0
+    def _r_steering_stability(steering_angle, steering_threshold=25):
+        normalized_steering = abs(steering_angle) / steering_threshold
+        return max(1.0, 2 * (1 - normalized_steering))
 
     ################ REWARD AND PUNISHMENT ################
     reward = 1
