@@ -21,7 +21,7 @@ def reward_function(params):
     MAX_SPEED = 4
     MIN_SPEED = 1.5
     HALF_SPEED = (MAX_SPEED + MIN_SPEED)/2
-    LOOKAHEAD = 8
+    LOOKAHEAD = 5
     LINEAR_TOLERANCE = 0.1  # acceptable variance to be considered linear
 
     #################### RACING LINE ######################
@@ -245,13 +245,99 @@ def reward_function(params):
         upcoming_orl_points = [orl[(orl_index + i) % len(orl)] for i in range(lookahead)]
         return is_linear(upcoming_orl_points, tolerance)
 
+    def identify_segments(points, linear_threshold=0.1, turn_threshold=0.3, min_linear_points=4, is_ccw=False):
+        """
+        Identify linear segments and turns in the track centerline
+        Returns:
+        list of dicts: Each dictionary contains the start and end indices of a segment,
+                       the type ('linear' or 'turn'), direction ('left' or 'right' for turns), and the curvature.
+        """
+        segments = []
+
+        def calculate_curvature(point1, point2, point3):
+            # Calculate the curvature using three points
+            a = np.linalg.norm(np.array(point1) - np.array(point2))
+            b = np.linalg.norm(np.array(point2) - np.array(point3))
+            c = np.linalg.norm(np.array(point3) - np.array(point1))
+            if a * b * c == 0:
+                return 0
+            # Adding a zero z-component to the 2D vectors
+            point1_3d = np.array([point1[0], point1[1], 0])
+            point2_3d = np.array([point2[0], point2[1], 0])
+            point3_3d = np.array([point3[0], point3[1], 0])
+            return (4 * np.linalg.norm(np.cross(point2_3d - point1_3d, point3_3d - point1_3d))) / (a * b * c)
+
+        def determine_turn_direction(point1, point2, point3, is_ccw):
+            # Determine the direction of the turn
+            turn_vector = (point3[0] - point2[0]) * (point2[1] - point1[1]) - (point3[1] - point2[1]) * (point2[0] - point1[0])
+            if is_ccw:
+                return 'right' if turn_vector > 0 else 'left'
+            else:
+                return 'left' if turn_vector > 0 else 'right'
+
+        start_index = 0
+        segment_type = 'linear'
+        for i in range(1, len(points) - 1):
+            curvature = calculate_curvature(points[i-1], points[i], points[i+1])
+            if curvature > turn_threshold and segment_type == 'linear':
+                if i - 1 > start_index and i - start_index >= min_linear_points:
+                    segments.append({
+                        'start_index': start_index,
+                        'end_index': i-1,
+                        'type': 'linear',
+                        'curvature': curvature
+                    })
+                    start_index = i-1
+                    segment_type = 'turn'
+                else:
+                    # Merge gap into the turn
+                    segment_type = 'turn'
+            elif curvature <= linear_threshold and segment_type == 'turn':
+                if i - start_index >= min_linear_points:
+                    turn_direction = determine_turn_direction(points[start_index-1], points[start_index], points[i], is_ccw)
+                    segments.append({
+                        'start_index': start_index,
+                        'end_index': i-1,
+                        'type': 'turn',
+                        'direction': turn_direction,
+                        'curvature': curvature
+                    })
+                    start_index = i-1
+                    segment_type = 'linear'
+                else:
+                    # Merge gap into the turn
+                    segment_type = 'turn'
+
+        # Handle the last segment
+        if start_index < len(points) - 1:
+            segment_curvature = calculate_curvature(points[start_index-1], points[start_index], points[-1]) if start_index > 0 else 0
+            segments.append({
+                'start_index': start_index,
+                'end_index': len(points) - 1,
+                'type': segment_type,
+                'curvature': segment_curvature
+            })
+
+        return segments
+
+    def find_segment_by_index(segments, index):
+        for segment in segments:
+            if segment['start_index'] <= index <= segment['end_index']:
+                return segment
+        return None
+
     #################### SETUP ######################
+    # orl point and proximity
     next_orl_point = get_nearest_orl_point(closest_waypoints, waypoints, orl)
     next_orl_point_index = orl.index(next_orl_point)
     dist_to_orl_point = get_distance_to_nearest_orl_point((x, y), closest_waypoints, waypoints, orl)
-
     lookahead_points = [orl[(next_orl_point_index + i) % len(orl)] for i in range(LOOKAHEAD)]
     is_linear_section = section_is_linear(next_orl_point_index, LOOKAHEAD, orl)
+    # default centerline point, segmentation
+    next_wp_index = closest_waypoints[1]
+    next_wp = waypoints[closest_waypoints[1]]
+    track_segments = identify_segments(waypoints, linear_threshold=LINEAR_TOLERANCE, turn_threshold=0.3, min_linear_points=LOOKAHEAD, is_ccw=True)
+    current_segment = find_segment_by_index(track_segments, next_wp_index)
 
     center, radius = fit_circle(lookahead_points)
     turn_is_left = is_turn_left(center, (x, y))
@@ -294,8 +380,21 @@ def reward_function(params):
             return abs(2 * p / s)
         return 1e-3
 
-    def _r_lane_choice(points_turn_left=turn_is_left, agent_is_loc=is_left_of_center):
-        return points_turn_left == agent_is_loc
+    def _r_lane_choice(curr_segment=current_segment, agent_is_loc=is_left_of_center):
+        base_lane_reward = 2
+        seg_dir = curr_segment.get('direction', None)
+        if seg_dir == 'left':
+            if agent_is_loc:
+                base_lane_reward *= 2.0
+            else:
+                base_lane_reward *= 0.50
+        elif seg_dir == 'right':
+            if agent_is_loc:
+                base_lane_reward *= 0.50
+            else:
+                base_lane_reward *= 2.0
+
+        return base_lane_reward
 
     def _r_speed_by_section():
         base_speed_reward = 2
@@ -303,16 +402,16 @@ def reward_function(params):
             base_speed_reward *= speed_min_diff
         else:
             base_speed_reward *= abs(1 - speed_half_diff)
-            base_speed_reward *= 2.0 if _r_lane_choice() else 1.0
         return base_speed_reward
 
-    def _r_steering_stability(steering_angle, steering_threshold=15):
+    def _r_steering_stability(steering_angle, steering_threshold=20):
         return 2.5 if abs(steering_angle) < steering_threshold else 1.0
 
     ################ REWARD AND PUNISHMENT ################
     reward = 1
     reward += _r_dist_to_orl()
     reward *= _r_track_utilization_tolerance()
+    reward += _r_lane_choice(curr_segment=current_segment, agent_is_loc=is_left_of_center)
     reward += _r_intermediate_progress(p=progress, s=steps)
     reward += _r_speed_by_section()
     reward += _r_steering_stability(steering_angle=steering_angle)
