@@ -1,6 +1,7 @@
 import math
 import numpy as np
 
+
 def reward_function(params):
     all_wheels_on_track = params['all_wheels_on_track']
     x = params['x']
@@ -21,8 +22,9 @@ def reward_function(params):
     MAX_SPEED = 4
     MIN_SPEED = 1.5
     HALF_SPEED = (MAX_SPEED + MIN_SPEED)/2
-    LOOKAHEAD = 7
-    LINEAR_TOLERANCE = 0.1  # acceptable variance to be considered linear
+    LOOKAHEAD = 8
+    # LINEAR_TOLERANCE = 0.1  # acceptable variance to be considered linear
+    TRACK_CCW: bool = False  # is track counterclockwise?
 
     #################### RACING LINE ######################
     orl = [[ 5.04771855e+00,  6.58627988e-01],
@@ -207,27 +209,27 @@ def reward_function(params):
         nearest_orl_point = get_nearest_orl_point(cp, waypoints, orl)
         return dist_2_points(agent_coords, nearest_orl_point)
 
-    def fit_circle(points):
-        x = np.array([p[0] for p in points])
-        y = np.array([p[1] for p in points])
+    # def fit_circle(points):
+    #     x = np.array([p[0] for p in points])
+    #     y = np.array([p[1] for p in points])
+    #
+    #     A = np.c_[x, y, np.ones(len(x))]
+    #     b = x**2 + y**2
+    #
+    #     C = np.linalg.lstsq(A, b, rcond=None)[0]
+    #     cx = C[0] / 2
+    #     cy = C[1] / 2
+    #     radius = math.sqrt((C[2] + cx**2 + cy**2))
+    #
+    #     return (cx, cy), radius
+    #
+    # def is_turn_left(center, agent_position):
+    #     cx, cy = center
+    #     ax, ay = agent_position
+    #     vector_to_center = np.array([cx - ax, cy - ay])
+    #     return vector_to_center[0] < 0  # True for left, False for right
 
-        A = np.c_[x, y, np.ones(len(x))]
-        b = x**2 + y**2
-
-        C = np.linalg.lstsq(A, b, rcond=None)[0]
-        cx = C[0] / 2
-        cy = C[1] / 2
-        radius = math.sqrt((C[2] + cx**2 + cy**2))
-
-        return (cx, cy), radius
-
-    def is_turn_left(center, agent_position):
-        cx, cy = center
-        ax, ay = agent_position
-        vector_to_center = np.array([cx - ax, cy - ay])
-        return vector_to_center[0] < 0  # True for left, False for right
-
-    def is_linear(points, tolerance=LINEAR_TOLERANCE):
+    def is_linear(points, tolerance):
         x_coordinates = [point[0] for point in points]
         y_coordinates = [point[1] for point in points]
 
@@ -241,17 +243,11 @@ def reward_function(params):
                 return False
         return True
 
-    def section_is_linear(orl_index, lookahead, orl, tolerance=LINEAR_TOLERANCE):
+    def section_is_linear(orl_index, lookahead, orl, tolerance):
         upcoming_orl_points = [orl[(orl_index + i) % len(orl)] for i in range(lookahead)]
         return is_linear(upcoming_orl_points, tolerance)
 
-    def identify_segments(points, linear_threshold=0.1, turn_threshold=0.3, min_linear_points=4, is_ccw=False):
-        """
-        Identify linear segments and turns in the track centerline
-        Returns:
-        list of dicts: Each dictionary contains the start and end indices of a segment,
-                       the type ('linear' or 'turn'), direction ('left' or 'right' for turns), and the curvature.
-        """
+    def identify_segments(points, linear_threshold=0.1, turn_threshold=0.3, min_linear_points=4, is_ccw=TRACK_CCW):
         segments = []
 
         def calculate_curvature(point1, point2, point3):
@@ -327,105 +323,92 @@ def reward_function(params):
         return None
 
     #################### SETUP ######################
-    # orl point and proximity
+    # define orl point and upcoming peers
     next_orl_point = get_nearest_orl_point(closest_waypoints, waypoints, orl)
     next_orl_point_index = orl.index(next_orl_point)
+    # orl calculations
     dist_to_orl_point = get_distance_to_nearest_orl_point((x, y), closest_waypoints, waypoints, orl)
     lookahead_points = [orl[(next_orl_point_index + i) % len(orl)] for i in range(LOOKAHEAD)]
-    is_linear_section = section_is_linear(next_orl_point_index, LOOKAHEAD, orl)
+    # is_linear_section = section_is_linear(next_orl_point_index, LOOKAHEAD, orl)
+    orl_segments = identify_segments(orl, linear_threshold=0.5, turn_threshold=0.001, min_linear_points=LOOKAHEAD, is_ccw=TRACK_CCW)
+    orl_segment = find_segment_by_index(orl_segments, next_orl_point_index)
+
     # default centerline point, segmentation
     next_wp_index = closest_waypoints[1]
     next_wp = waypoints[closest_waypoints[1]]
-    track_segments = identify_segments(waypoints, linear_threshold=LINEAR_TOLERANCE, turn_threshold=0.3, min_linear_points=LOOKAHEAD, is_ccw=True)
+    track_segments = identify_segments(waypoints, linear_threshold=0.1, turn_threshold=0.1, min_linear_points=LOOKAHEAD, is_ccw=TRACK_CCW)
     current_segment = find_segment_by_index(track_segments, next_wp_index)
-
-    center, radius = fit_circle(lookahead_points)
-    turn_is_left = is_turn_left(center, (x, y))
 
     speed_max_diff = abs(MAX_SPEED - speed)
     speed_min_diff = abs(speed - MIN_SPEED)
     speed_half_diff = abs(speed - HALF_SPEED)
-
+    speed_max_minus = MAX_SPEED * 0.90
+    speed_half_plus = HALF_SPEED * 1.15
+    speed_half_minus = HALF_SPEED * 0.90
     #################### REWARD FUNCTIONS ######################
     def _r_dist_to_orl(dv=dist_to_orl_point):
-        base_reward = 10.00
-        if dv <= 0.10:
-            return base_reward * 1.75
-        elif dv <= 0.50:
-            return base_reward * 1.25
-        elif dv <= 2.50:
-            return base_reward * 0.85
-        elif dv <= 4.00:
-            return base_reward * 0.50
-        return 1.00
+        if dv >= 5:
+            return 1e-3
+        base_dist_reward = 5.00 * abs((5 - dv)**2)
+        return base_dist_reward
 
-    def _r_track_utilization_tolerance(dfl=distance_from_center, tw=track_width):
-        if dfl <= 0.475 * tw:
-            return 1.015
-        elif dfl <= 0.480 * tw:
-            return 0.30
-        elif dfl <= 0.485 * tw:
-            return 0.20
-        elif dfl <= 0.495 * tw:
-            return 0.10
-        return 1e-3
+    def _r_track_utilization_tolerance(dfl=distance_from_center, full_tw=track_width):
+        base_util_reward = 1
+        half_width = full_tw * 0.50
+        percentages = [0.95, 0.93, 0.90]
+        for perc in percentages:
+            if dfl >= half_width * perc:
+                return base_util_reward - perc
+        return base_util_reward  # 1, .05, .07...
 
     def _r_is_destroying_the_car(all_on=all_wheels_on_track, wrecked=is_crashed, gone_off=is_offtrack):
         return wrecked or gone_off or not all_on
 
     def _r_intermediate_progress(p, s):
         if p in [25, 50, 75, 100]:
+            if p == 100:
+                return 1000
             return 2 * p
         if p > 0 and s > 0:
             return abs(2 * p / s)
         return 1e-3
 
-    def _r_lane_choice(curr_segment=current_segment, agent_is_loc=is_left_of_center):
+    def _r_lane_choice(curr_segment=orl_segment, agent_is_loc=is_left_of_center):
         base_lane_reward = 2
         seg_dir = curr_segment.get('direction', None)
-        center_distance_multiplier = 1 - (distance_from_center / (track_width / 2))
-        if seg_dir == 'left':
-            if agent_is_loc:
-                base_lane_reward *= 2.0
-            else:
-                base_lane_reward *= 0.50 * center_distance_multiplier
-        elif seg_dir == 'right':
-            if agent_is_loc:
-                base_lane_reward *= 0.50
-            else:
-                base_lane_reward *= 2.0 * center_distance_multiplier
-
+        if seg_dir is None:
+            return base_lane_reward  # early exit for linear; no segment direction value
+        in_best_lane = seg_dir == 'left' and agent_is_loc or seg_dir == 'right' and not agent_is_loc
+        base_lane_reward *= 2.00 if in_best_lane else 0.50
         return base_lane_reward
 
-    def _r_speed_by_section():
-        base_speed_reward = 2
-        if is_linear_section:
+    def _r_speed_by_section(curr_segment=current_segment):
+        base_speed_reward = _r_lane_choice() ** 2  # weighted; 16 (good), 4 (linear/neutral), 1 (bad)
+        seg_type = curr_segment.get('type')  # linear, turn
+        if seg_type == 'linear':
             base_speed_reward *= speed_min_diff
-        else:
-            speed_cushion = HALF_SPEED * 1.05
-            base_speed_reward *= abs(1 - speed_half_diff) + speed if speed_cushion >= speed else 0
-            lane_bonus = _r_lane_choice(curr_segment=current_segment, agent_is_loc=is_left_of_center)
-            base_speed_reward += lane_bonus if lane_bonus > 2 else 0
+            return base_speed_reward  # early exit for linear; glhf
+        base_speed_reward *= 2.00 if speed_max_minus > speed >= HALF_SPEED else 0.50
         return base_speed_reward
 
     def _r_steering_stability(steering_angle, steering_threshold=25):
         normalized_steering = abs(steering_angle) / steering_threshold
+        if abs(steering_angle) > steering_threshold * 0.95:
+            return 0.50  # warn approaching threshold
         return max(1.0, 2 * (1 - normalized_steering))
 
     ################ REWARD AND PUNISHMENT ################
     reward = 1
     reward += _r_dist_to_orl()
-    reward *= _r_track_utilization_tolerance()
-    reward += _r_lane_choice(curr_segment=current_segment, agent_is_loc=is_left_of_center)
+    reward += _r_lane_choice(curr_segment=orl_segment, agent_is_loc=is_left_of_center)
     reward += _r_intermediate_progress(p=progress, s=steps)
     reward += _r_speed_by_section()
     reward += _r_steering_stability(steering_angle=steering_angle)
-
-    if speed < MIN_SPEED:
-        reward *= 0.50
+    # multiple! heavily influence final outcome
+    reward *= _r_track_utilization_tolerance()
 
     if _r_is_destroying_the_car():
-        reward = 1e-3
+        reward *= 0.01
 
     return float(reward)
 
