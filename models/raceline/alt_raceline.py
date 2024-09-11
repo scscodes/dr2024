@@ -24,7 +24,7 @@ def reward_function(params):
     HALF_SPEED = (MAX_SPEED + MIN_SPEED)/2
     LOOKAHEAD = 8
     # LINEAR_TOLERANCE = 0.1  # acceptable variance to be considered linear
-    TRACK_CCW: bool = False  # is track counterclockwise?
+    TRACK_CCW: bool = True  # is track counterclockwise?
 
     #################### RACING LINE ######################
     orl = [[ 5.04771855e+00,  6.58627988e-01],
